@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d1520" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>防线·铸塔 — Tower Line</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header id="hud">
+      <div class="hud-item" title="生命">
+        <span class="hud-icon">❤</span>
+        <span id="hud-lives">20</span>
+      </div>
+      <div class="hud-item" title="金币">
+        <span class="hud-icon">🪙</span>
+        <span id="hud-gold">200</span>
+      </div>
+      <div class="hud-item" title="波次">
+        <span class="hud-icon">⚔</span>
+        <span id="hud-wave">0/14</span>
+      </div>
+      <div class="hud-item hud-status" id="hud-status">准备就绪</div>
+    </header>
+
+    <main id="stage-wrap">
+      <canvas id="game" width="480" height="720"></canvas>
+      <div id="toast" class="hidden"></div>
+    </main>
+
+    <aside id="panel">
+      <div id="build-panel" class="panel-block">
+        <div class="panel-title">建造</div>
+        <div class="tower-btns">
+          <button type="button" class="tower-btn" data-type="mg" id="btn-mg">
+            <span class="tb-swatch" style="background:#5ad4ff"></span>
+            <span class="tb-name">机枪</span>
+            <span class="tb-cost">50</span>
+            <span class="tb-desc">快 · 单体</span>
+          </button>
+          <button type="button" class="tower-btn" data-type="cannon" id="btn-cannon">
+            <span class="tb-swatch" style="background:#ff8c42"></span>
+            <span class="tb-name">炮塔</span>
+            <span class="tb-cost">120</span>
+            <span class="tb-desc">爆炸</span>
+          </button>
+          <button type="button" class="tower-btn" data-type="frost" id="btn-frost">
+            <span class="tb-swatch" style="background:#7ec8ff"></span>
+            <span class="tb-name">冰霜</span>
+            <span class="tb-cost">100</span>
+            <span class="tb-desc">减速</span>
+          </button>
+          <button type="button" class="tower-btn" data-type="sniper" id="btn-sniper">
+            <span class="tb-swatch" style="background:#c084fc"></span>
+            <span class="tb-name">狙击</span>
+            <span class="tb-cost">160</span>
+            <span class="tb-desc">高伤</span>
+          </button>
+        </div>
+        <p class="hint">点选塔种 → 点路径外空地建造 · 点已有塔升级/卖掉</p>
+      </div>
+
+      <div id="select-panel" class="panel-block hidden">
+        <div class="panel-title" id="sel-title">机枪塔 Lv.1</div>
+        <div class="sel-stats" id="sel-stats"></div>
+        <div class="sel-actions">
+          <button type="button" class="action-btn primary" id="btn-up-dmg">升级伤害</button>
+          <button type="button" class="action-btn primary" id="btn-up-rate">升级射速</button>
+          <button type="button" class="action-btn danger" id="btn-sell">卖掉</button>
+          <button type="button" class="action-btn ghost" id="btn-deselect">取消</button>
+        </div>
+      </div>
+
+      <div class="panel-block wave-block">
+        <button type="button" class="action-btn wave-btn" id="btn-next-wave">开始第 1 波</button>
+      </div>
+    </aside>
+
+    <div id="overlay" class="hidden">
+      <div class="overlay-card">
+        <h2 id="end-title">胜利</h2>
+        <p id="end-msg"></p>
+        <ul id="end-stats"></ul>
+        <button type="button" class="action-btn primary big" id="btn-restart">再来一局</button>
+      </div>
+    </div>
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>
