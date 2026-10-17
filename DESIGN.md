@@ -23,4 +23,4 @@
 步兵基准：血40、速1.0、赏8。波间休息4s；第5/10波前多2s。可提前下一波获约5金。
 
 ## 部署
-`https://dannywang0822.github.io/tower-defense/?v=3`
+`https://dannywang0822.github.io/tower-defense/?v=4`

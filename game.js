@@ -258,8 +258,12 @@
 
   function resize() {
     const wrap = canvas.parentElement;
-    const w = wrap.clientWidth || 400;
-    cellSize = Math.floor(w / COLS);
+    const availW = Math.max(1, wrap.clientWidth || 400);
+    const availH = Math.max(1, wrap.clientHeight || 600);
+    // Fit-contain: 8×12 board inside stage-wrap without page overflow
+    const cellByW = Math.floor(availW / COLS);
+    const cellByH = Math.floor(availH / ROWS);
+    cellSize = Math.max(8, Math.min(cellByW, cellByH));
     canvas.width = cellSize * COLS;
     canvas.height = cellSize * ROWS;
     rebuildPathPixels();
@@ -1194,6 +1198,11 @@
 
   // ---------- 启动 ----------
   window.addEventListener("resize", resize);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", resize);
+  }
+  // Layout may settle after first paint (fonts/safe-area); remeasure once
+  requestAnimationFrame(() => requestAnimationFrame(resize));
   resize();
   updateHUD();
   requestAnimationFrame(frame);
