@@ -2,7 +2,7 @@
 
 竖屏「几」字形路径 HTML5 塔防。
 
-**在线：** https://dannywang0822.github.io/tower-defense/?v=2
+**在线：** https://dannywang0822.github.io/tower-defense/?v=3
 
 开局生命 20 / 金币 120 · 12 波 · 箭塔 / 炮塔 / 霜塔 · 可升级与卖塔。
 

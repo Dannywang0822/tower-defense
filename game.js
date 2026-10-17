@@ -99,7 +99,10 @@
           { kind: "normal", count: 8, speedMul: 1.0, hpMul: 1.15 },
           { kind: "fast", count: 2, speedMul: 1.4, hpMul: 0.7, reward: 10 },
         ];
-      case 5: return [{ kind: "normal", count: 12, speedMul: 1.1, hpMul: 1.35 }];
+      case 5: return [
+        { kind: "normal", count: 8, speedMul: 1.1, hpMul: 1.3 },
+        { kind: "boss", count: 1, speedMul: 0.75, hpMul: 6, reward: 50 },
+      ];
       case 6:
         return [
           { kind: "normal", count: 10, speedMul: 1.05, hpMul: 1.3 },
@@ -114,8 +117,9 @@
       case 9: return [{ kind: "normal", count: 16, speedMul: 1.2, hpMul: 1.7 }];
       case 10:
         return [
-          { kind: "normal", count: 12, speedMul: 1.15, hpMul: 1.6 },
-          { kind: "tank", count: 3, speedMul: 0.65, hpMul: 3.5, reward: 25 },
+          { kind: "normal", count: 10, speedMul: 1.15, hpMul: 1.55 },
+          { kind: "tank", count: 2, speedMul: 0.65, hpMul: 3.5, reward: 25 },
+          { kind: "boss", count: 1, speedMul: 0.7, hpMul: 9, reward: 70 },
         ];
       case 11:
         return [
@@ -173,6 +177,7 @@
     enemies: [],
     projectiles: [],
     particles: [],
+    explosions: [],
     spawnQueue: [],
     spawnTimer: 0,
     hoverCell: null,
@@ -348,6 +353,7 @@
       this.slowUntil = 0;
       this.dead = false;
       this.escaped = false;
+      this.hitFlash = 0;
       // 视觉
       if (kind === "fast") {
         this.radius = 0.28;
@@ -461,7 +467,8 @@
     updateHUD();
     btnNextWave.disabled = true;
     btnNextWave.textContent = `第 ${n} 波进行中…`;
-    toast(`第 ${n} 波来袭！`);
+    const hasBoss = state.spawnQueue.some((q) => q.kind === "boss");
+    toast(hasBoss ? `⚠ 第 ${n} 波 · Boss 来袭！` : `第 ${n} 波来袭！`, hasBoss ? 2200 : 1600);
   }
 
   function beginCountdown(nextWave) {
@@ -555,6 +562,7 @@
       enemies: [],
       projectiles: [],
       particles: [],
+      explosions: [],
       spawnQueue: [],
       spawnTimer: 0,
       hoverCell: null,
@@ -662,7 +670,11 @@
       selectTower(existing);
       return;
     }
-    if (state.buildType && canPlace(c, r)) {
+    if (state.buildType) {
+      if (!canPlace(c, r)) {
+        toast(isPath(c, r) ? "路径上不能建塔" : "此处无法建造");
+        return;
+      }
       const cost = TOWER_DEFS[state.buildType].cost;
       if (state.gold < cost) {
         toast("金币不足");
@@ -672,15 +684,13 @@
       state.spent += cost;
       const tower = new Tower(state.buildType, c, r);
       state.towers.push(tower);
+      spawnParticle(tower.x, tower.y, tower.color, 8);
       selectTower(tower);
       toast(`建造 ${tower.name}`);
       updateHUD();
       return;
     }
     deselect();
-    if (!state.buildType && !isPath(c, r) && canPlace(c, r)) {
-      // 提示选塔
-    }
   }
 
   function onPointerMove(e) {
@@ -702,6 +712,11 @@
     e.preventDefault();
     onPointerMove(e);
   }, { passive: false });
+  const stage = document.getElementById("stage-wrap");
+  if (stage) {
+    stage.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+  }
+  document.addEventListener("dblclick", (e) => e.preventDefault(), { passive: false });
 
   towerBtns.forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -774,6 +789,7 @@
   function damageEnemy(e, amount, now) {
     if (e.dead) return;
     e.hp -= amount;
+    e.hitFlash = now + 0.1;
     if (e.hp <= 0) {
       e.dead = true;
       e.hp = 0;
@@ -797,6 +813,7 @@
         }
       }
       spawnParticle(p.tx, p.ty, "#ffab91", 10);
+      state.explosions.push({ x: p.tx, y: p.ty, r: 4, maxR: p.splash, life: 0.28, maxLife: 0.28 });
     } else {
       if (target && !target.dead && !target.escaped) {
         damageEnemy(target, p.damage, now);
@@ -895,6 +912,18 @@
     }
     state.projectiles = state.projectiles.filter((p) => p.alive);
 
+    // 爆炸圈
+    for (const ex of state.explosions) {
+      const a = Math.max(0, ex.life / ex.maxLife);
+      ctx.beginPath();
+      ctx.arc(ex.x, ex.y, ex.r, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255,140,66,${a})`;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.fillStyle = `rgba(255,180,80,${a * 0.2})`;
+      ctx.fill();
+    }
+
     // 粒子
     for (const pt of state.particles) {
       pt.life -= dt;
@@ -904,6 +933,13 @@
       pt.vy *= 0.92;
     }
     state.particles = state.particles.filter((pt) => pt.life > 0);
+
+    for (const ex of state.explosions) {
+      ex.life -= dt;
+      const t = 1 - Math.max(0, ex.life) / ex.maxLife;
+      ex.r = ex.maxR * (0.25 + 0.75 * t);
+    }
+    state.explosions = state.explosions.filter((ex) => ex.life > 0);
 
     checkWaveClear();
     updateHUD();
@@ -921,12 +957,10 @@
         const x = c * cellSize;
         const y = r * cellSize;
         if (isPath(c, r)) {
-          ctx.fillStyle = "#4a3b2a";
+          ctx.fillStyle = "#1a2430";
           ctx.fillRect(x, y, cellSize, cellSize);
-          ctx.strokeStyle = "rgba(0,0,0,0.15)";
-          ctx.strokeRect(x + 0.5, y + 0.5, cellSize - 1, cellSize - 1);
         } else {
-          ctx.fillStyle = (c + r) % 2 === 0 ? "#2d4a3e" : "#355647";
+          ctx.fillStyle = (c + r) % 2 === 0 ? "#152018" : "#1a281f";
           ctx.fillRect(x, y, cellSize, cellSize);
         }
       }
@@ -939,14 +973,19 @@
       for (let i = 1; i < pathPoints.length; i++) {
         ctx.lineTo(pathPoints[i].x, pathPoints[i].y);
       }
-      ctx.strokeStyle = "#6d5a42";
-      ctx.lineWidth = cellSize * 0.55;
+      ctx.strokeStyle = "#2a3d52";
+      ctx.lineWidth = cellSize * 0.62;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.stroke();
-      ctx.strokeStyle = "#8a7355";
-      ctx.lineWidth = cellSize * 0.28;
+      ctx.strokeStyle = "#3d5a73";
+      ctx.lineWidth = cellSize * 0.38;
       ctx.stroke();
+      ctx.setLineDash([5, 7]);
+      ctx.strokeStyle = "rgba(79,195,247,0.28)";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
 
     // 入口 / 出口标记
@@ -1107,9 +1146,16 @@
   function drawEnemy(e) {
     const rad = e.radius * cellSize;
     const slowed = e.slowMul < 1;
+    const now = performance.now() / 1000;
+    if (slowed) {
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, rad + 4, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(129,212,250,0.28)";
+      ctx.fill();
+    }
     ctx.beginPath();
     ctx.arc(e.x, e.y, rad, 0, Math.PI * 2);
-    ctx.fillStyle = slowed ? "#90caf9" : e.color;
+    ctx.fillStyle = (e.hitFlash && now < e.hitFlash) ? "#ffffff" : (slowed ? "#90caf9" : e.color);
     ctx.fill();
     ctx.strokeStyle = "rgba(0,0,0,0.35)";
     ctx.lineWidth = 1.5;

@@ -21,6 +21,8 @@ html, body {
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
   user-select: none;
+  overscroll-behavior: none;
+  overflow: hidden;
 }
 #app {
   max-width: 480px;
@@ -203,3 +205,13 @@ html, body {
 @media (min-width: 520px) {
   #app { padding: 16px; gap: 12px; }
 }
+
+#btn-restart {
+  min-height: 52px;
+  font-size: 17px !important;
+  background: linear-gradient(135deg, #2e7d32, #43a047) !important;
+}
+#stage-wrap { touch-action: none; }
+body { height: 100%; height: 100dvh; }
+.tower-btn { min-height: 64px; }
+.action-btn { min-height: 44px; }
