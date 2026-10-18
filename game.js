@@ -1076,6 +1076,12 @@
         } else {
           ctx.fillStyle = (c + r) % 2 === 0 ? "#152018" : "#1a281f";
           ctx.fillRect(x, y, cellSize, cellSize);
+          ctx.fillStyle = "rgba(80,140,90,0.12)";
+          const seed = (c * 17 + r * 31) & 7;
+          if (seed < 3) {
+            ctx.fillRect(x + cellSize * 0.2, y + cellSize * 0.35, 1.5, 1.5);
+            ctx.fillRect(x + cellSize * 0.65, y + cellSize * 0.7, 1.5, 1.5);
+          }
         }
       }
     }
@@ -1207,47 +1213,52 @@
     if (p.style === "cannon") {
       ctx.beginPath();
       ctx.arc(p.x, p.y, 5.5, 0, Math.PI * 2);
-      ctx.fillStyle = "#ff8a65";
+      ctx.fillStyle = "#ffab76";
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(p.x - 1, p.y - 1, 2.2, 0, Math.PI * 2);
-      ctx.fillStyle = "#ffe0b2";
+      ctx.arc(p.x - 1.2, p.y - 1.2, 2.2, 0, Math.PI * 2);
+      ctx.fillStyle = "#fff3e0";
       ctx.fill();
+      ctx.strokeStyle = "#bf360c";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 5.5, 0, Math.PI * 2);
+      ctx.stroke();
     } else if (p.style === "frost") {
       ctx.save();
       ctx.translate(p.x, p.y);
-      ctx.rotate(Math.atan2(p.vy, p.vx));
-      ctx.fillStyle = "#b3e5fc";
-      ctx.beginPath();
-      ctx.moveTo(6, 0);
-      ctx.lineTo(-3, -4);
-      ctx.lineTo(-1, 0);
-      ctx.lineTo(-3, 4);
-      ctx.closePath();
-      ctx.fill();
       ctx.strokeStyle = "#e1f5fe";
-      ctx.lineWidth = 1;
+      ctx.fillStyle = "#81d4fa";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(a) * 5, Math.sin(a) * 5);
+      }
       ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, 2.2, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
     } else {
-      // 箭矢
       ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(Math.atan2(p.vy, p.vx));
-      ctx.fillStyle = "#a5d6a7";
+      ctx.fillStyle = "#c8e6c9";
       ctx.fillRect(-7, -1.2, 11, 2.4);
-      ctx.fillStyle = "#ef9a9a";
+      ctx.fillStyle = "#ffecb3";
       ctx.beginPath();
       ctx.moveTo(6, 0);
-      ctx.lineTo(1, -3.5);
-      ctx.lineTo(1, 3.5);
+      ctx.lineTo(2, -2.8);
+      ctx.lineTo(2, 2.8);
       ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = "#81c784";
+      ctx.fillStyle = "#43a047";
       ctx.beginPath();
       ctx.moveTo(-7, 0);
       ctx.lineTo(-10, -2.5);
-      ctx.lineTo(-8, 0);
+      ctx.lineTo(-8.5, 0);
       ctx.lineTo(-10, 2.5);
       ctx.closePath();
       ctx.fill();
@@ -1256,322 +1267,604 @@
   }
 
   function drawGate(x, y, color, label) {
+    const r = cellSize * 0.32;
     ctx.beginPath();
-    ctx.arc(x, y, cellSize * 0.28, 0, Math.PI * 2);
+    ctx.arc(x, y, r + 3, 0, Math.PI * 2);
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.35;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = "#1e2836";
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, r * 0.62, 0, Math.PI * 2);
     ctx.fillStyle = color;
-    ctx.globalAlpha = 0.85;
+    ctx.globalAlpha = 0.9;
     ctx.fill();
     ctx.globalAlpha = 1;
     ctx.fillStyle = "#0f1620";
-    ctx.font = `700 ${Math.max(10, cellSize * 0.28)}px sans-serif`;
+    ctx.font = `700 ${Math.max(10, cellSize * 0.26)}px sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(label, x, y);
+    ctx.fillText(label, x, y + 0.5);
+  }
+
+  function roundRectPath(x, y, w, h, r) {
+    const rr = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.arcTo(x + w, y + h, x, y + h, rr);
+    ctx.arcTo(x, y + h, x, y, rr);
+    ctx.arcTo(x, y, x + w, y, rr);
+    ctx.closePath();
+  }
+
+  function drawTowerLevelMarks(t, s) {
+    if (t.level <= 1) return;
+    const n = t.level - 1;
+    for (let i = 0; i < n; i++) {
+      const ox = (i - (n - 1) / 2) * s * 0.14;
+      const gy = t.y - s * 0.4;
+      if (t.type === "arrow") {
+        ctx.fillStyle = "#ffd54f";
+        ctx.fillRect(t.x + ox - 1, gy - s * 0.12, 2, s * 0.16);
+        ctx.beginPath();
+        ctx.moveTo(t.x + ox + 1, gy - s * 0.12);
+        ctx.lineTo(t.x + ox + s * 0.1, gy - s * 0.06);
+        ctx.lineTo(t.x + ox + 1, gy);
+        ctx.closePath();
+        ctx.fillStyle = "#66bb6a";
+        ctx.fill();
+      } else if (t.type === "cannon") {
+        ctx.beginPath();
+        ctx.arc(t.x + ox, gy, s * 0.055, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffd54f";
+        ctx.fill();
+        ctx.strokeStyle = "#ff8a65";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(t.x + ox, gy - s * 0.07);
+        ctx.lineTo(t.x + ox + s * 0.05, gy);
+        ctx.lineTo(t.x + ox, gy + s * 0.07);
+        ctx.lineTo(t.x + ox - s * 0.05, gy);
+        ctx.closePath();
+        ctx.fillStyle = "#e1f5fe";
+        ctx.fill();
+        ctx.strokeStyle = "#4fc3f7";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
   }
 
   function drawTower(t) {
     const s = cellSize;
-    const now = performance.now() / 1000;
+    if (t.type === "arrow") drawArrowTower(t, s);
+    else if (t.type === "cannon") drawCannonTower(t, s);
+    else drawFrostTower(t, s);
+    drawTowerLevelMarks(t, s);
+  }
 
-    // 分层底座
+  function drawArrowTower(t, s) {
+    const br = s * 0.3;
     ctx.beginPath();
-    ctx.arc(t.x, t.y, s * 0.36, 0, Math.PI * 2);
-    ctx.fillStyle = "#0d1520";
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(t.x, t.y, s * 0.3, 0, Math.PI * 2);
-    const baseGrad = ctx.createRadialGradient(t.x - 2, t.y - 2, 2, t.x, t.y, s * 0.3);
-    baseGrad.addColorStop(0, t.colorLight || t.color);
-    baseGrad.addColorStop(1, t.colorDark);
-    ctx.fillStyle = baseGrad;
-    ctx.fill();
-    ctx.strokeStyle = t.color;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // 霜塔静止光环
-    if (t.type === "frost") {
-      ctx.beginPath();
-      ctx.arc(t.x, t.y, s * 0.42 + Math.sin(now * 3) * 1.5, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(129,212,250,0.35)";
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 - Math.PI / 8;
+      const px = t.x + Math.cos(a) * br;
+      const py = t.y + Math.sin(a) * br;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
     }
-
+    ctx.closePath();
+    ctx.fillStyle = "#5d4037";
+    ctx.fill();
+    ctx.strokeStyle = "#3e2723";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, s * 0.2, 0, Math.PI * 2);
+    ctx.fillStyle = "#8d6e63";
+    ctx.fill();
+    ctx.strokeStyle = "#6d4c41";
+    ctx.lineWidth = 1;
+    ctx.stroke();
     ctx.save();
     ctx.translate(t.x, t.y);
     ctx.rotate(t.angle);
-
-    if (t.type === "cannon") {
-      // 炮管
-      ctx.fillStyle = "#5d4037";
-      ctx.fillRect(s * 0.02, -s * 0.1, s * 0.32, s * 0.2);
-      ctx.fillStyle = t.color;
-      ctx.fillRect(s * 0.05, -s * 0.07, s * 0.28, s * 0.14);
-      ctx.beginPath();
-      ctx.arc(0, 0, s * 0.15, 0, Math.PI * 2);
-      ctx.fillStyle = t.colorDark;
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(0, 0, s * 0.09, 0, Math.PI * 2);
-      ctx.fillStyle = t.colorLight;
-      ctx.fill();
-      // 炮口火光
-      if (t.muzzleFlash > 0) {
-        const f = t.muzzleFlash / 0.08;
-        ctx.fillStyle = `rgba(255,220,100,${f})`;
-        ctx.beginPath();
-        ctx.arc(s * 0.34, 0, s * 0.1 * f, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = `rgba(255,120,40,${f * 0.8})`;
-        ctx.beginPath();
-        ctx.arc(s * 0.38, 0, s * 0.06 * f, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    } else if (t.type === "frost") {
-      // 冰晶塔身
-      ctx.fillStyle = t.colorLight;
-      for (let i = 0; i < 3; i++) {
-        const a = (i * Math.PI * 2) / 3;
-        ctx.beginPath();
-        ctx.moveTo(Math.cos(a) * s * 0.22, Math.sin(a) * s * 0.22);
-        ctx.lineTo(Math.cos(a + 0.4) * s * 0.08, Math.sin(a + 0.4) * s * 0.08);
-        ctx.lineTo(Math.cos(a - 0.4) * s * 0.08, Math.sin(a - 0.4) * s * 0.08);
-        ctx.closePath();
-        ctx.fill();
-      }
-      ctx.fillStyle = t.color;
-      ctx.beginPath();
-      ctx.moveTo(s * 0.3, 0);
-      ctx.lineTo(-s * 0.1, -s * 0.12);
-      ctx.lineTo(-s * 0.05, 0);
-      ctx.lineTo(-s * 0.1, s * 0.12);
-      ctx.closePath();
-      ctx.fill();
-      if (t.muzzleFlash > 0) {
-        const f = t.muzzleFlash / 0.08;
-        ctx.fillStyle = `rgba(227,242,253,${f})`;
-        ctx.beginPath();
-        ctx.arc(s * 0.28, 0, s * 0.08 * f, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    } else {
-      // 箭塔：弓身 + 弦
-      ctx.strokeStyle = "#5d4037";
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.arc(0, 0, s * 0.2, -1.0, 1.0);
-      ctx.stroke();
-      ctx.strokeStyle = t.colorLight;
-      ctx.lineWidth = 1.5;
-      // 弓弦（射击时拉紧闪光）
-      const pull = t.muzzleFlash > 0 ? -s * 0.06 : 0;
-      ctx.beginPath();
-      ctx.moveTo(0, -s * 0.18);
-      ctx.lineTo(pull, 0);
-      ctx.lineTo(0, s * 0.18);
-      ctx.stroke();
-      ctx.fillStyle = t.color;
-      ctx.beginPath();
-      ctx.arc(0, 0, s * 0.1, 0, Math.PI * 2);
-      ctx.fill();
-      // 箭在弦上
-      ctx.fillStyle = "#c8e6c9";
-      ctx.fillRect(pull, -1.2, s * 0.28 - pull, 2.4);
-      if (t.muzzleFlash > 0) {
-        const f = t.muzzleFlash / 0.08;
-        ctx.fillStyle = `rgba(200,230,201,${f})`;
-        ctx.beginPath();
-        ctx.arc(s * 0.28, 0, s * 0.07 * f, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
+    ctx.beginPath();
+    ctx.arc(0, 0, s * 0.12, 0, Math.PI * 2);
+    ctx.fillStyle = t.colorLight || "#a5d6a7";
+    ctx.fill();
+    ctx.strokeStyle = t.colorDark || "#2e7d32";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.strokeStyle = "#c8e6c9";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.02, 0);
+    ctx.lineTo(s * 0.32, 0);
+    ctx.stroke();
+    ctx.fillStyle = "#ffecb3";
+    ctx.beginPath();
+    ctx.moveTo(s * 0.38, 0);
+    ctx.lineTo(s * 0.28, -s * 0.06);
+    ctx.lineTo(s * 0.28, s * 0.06);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = t.color || "#66bb6a";
+    ctx.beginPath();
+    ctx.moveTo(s * 0.04, 0);
+    ctx.lineTo(-s * 0.04, -s * 0.07);
+    ctx.lineTo(s * 0.02, 0);
+    ctx.lineTo(-s * 0.04, s * 0.07);
+    ctx.closePath();
+    ctx.fill();
     ctx.restore();
+  }
 
-    if (t.level > 1) {
-      ctx.fillStyle = "#ffd54f";
-      ctx.font = `700 ${Math.max(9, s * 0.22)}px sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "bottom";
-      ctx.fillText("★".repeat(t.level - 1), t.x, t.y - s * 0.38);
+  function drawCannonTower(t, s) {
+    const hw = s * 0.28;
+    const hh = s * 0.26;
+    roundRectPath(t.x - hw, t.y - hh, hw * 2, hh * 2, 4);
+    ctx.fillStyle = "#4e342e";
+    ctx.fill();
+    ctx.strokeStyle = "#3e2723";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, s * 0.2, 0, Math.PI * 2);
+    ctx.fillStyle = "#795548";
+    ctx.fill();
+    ctx.strokeStyle = t.color || "#ef8354";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    const rivets = [
+      [-s * 0.2, -s * 0.18],
+      [s * 0.2, -s * 0.18],
+      [-s * 0.2, s * 0.18],
+      [s * 0.2, s * 0.18],
+    ];
+    for (const [rx, ry] of rivets) {
+      ctx.beginPath();
+      ctx.arc(t.x + rx, t.y + ry, 2, 0, Math.PI * 2);
+      ctx.fillStyle = "#bcaaa4";
+      ctx.fill();
     }
+    ctx.save();
+    ctx.translate(t.x, t.y);
+    ctx.rotate(t.angle);
+    roundRectPath(s * 0.02, -s * 0.09, s * 0.3, s * 0.18, 2);
+    ctx.fillStyle = "#6d4c41";
+    ctx.fill();
+    ctx.strokeStyle = "#3e2723";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(s * 0.32, 0, s * 0.1, 0, Math.PI * 2);
+    ctx.fillStyle = t.color || "#ef8354";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(s * 0.32, 0, s * 0.055, 0, Math.PI * 2);
+    ctx.fillStyle = "#1a120c";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(s * 0.28, -s * 0.04, 1.8, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,236,179,0.7)";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(0, 0, s * 0.1, 0, Math.PI * 2);
+    ctx.fillStyle = "#a1887f";
+    ctx.fill();
+    ctx.strokeStyle = "#5d4037";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawFrostTower(t, s) {
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, s * 0.38, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(79,195,247,0.14)";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, s * 0.28, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(129,212,250,0.18)";
+    ctx.fill();
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 - Math.PI / 6;
+      const px = t.x + Math.cos(a) * s * 0.26;
+      const py = t.y + Math.sin(a) * s * 0.26;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = "#01579b";
+    ctx.fill();
+    ctx.strokeStyle = t.color || "#4fc3f7";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.save();
+    ctx.translate(t.x, t.y);
+    ctx.beginPath();
+    ctx.moveTo(0, -s * 0.28);
+    ctx.lineTo(s * 0.12, -s * 0.04);
+    ctx.lineTo(s * 0.06, s * 0.16);
+    ctx.lineTo(-s * 0.06, s * 0.16);
+    ctx.lineTo(-s * 0.12, -s * 0.04);
+    ctx.closePath();
+    ctx.fillStyle = t.color || "#4fc3f7";
+    ctx.globalAlpha = 0.85;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = "#e1f5fe";
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.04, -s * 0.2);
+    ctx.lineTo(-s * 0.02, s * 0.1);
+    ctx.strokeStyle = "rgba(255,255,255,0.55)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.rotate(t.angle);
+    ctx.beginPath();
+    ctx.moveTo(s * 0.08, 0);
+    ctx.lineTo(s * 0.3, -s * 0.05);
+    ctx.lineTo(s * 0.3, s * 0.05);
+    ctx.closePath();
+    ctx.fillStyle = t.colorLight || "#b3e5fc";
+    ctx.fill();
+    ctx.strokeStyle = t.colorDark || "#0277bd";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+    const flakes = [
+      [s * 0.22, -s * 0.2],
+      [-s * 0.24, -s * 0.08],
+      [s * 0.2, s * 0.18],
+    ];
+    ctx.strokeStyle = "rgba(225,245,254,0.7)";
+    ctx.lineWidth = 1;
+    for (const [fx, fy] of flakes) {
+      const x = t.x + fx;
+      const y = t.y + fy;
+      ctx.beginPath();
+      ctx.moveTo(x - 3, y);
+      ctx.lineTo(x + 3, y);
+      ctx.moveTo(x, y - 3);
+      ctx.lineTo(x, y + 3);
+      ctx.stroke();
+    }
+  }
+
+  function bodyFill(base, flash, slow, kind) {
+    if (flash) return "#ffffff";
+    if (slow && kind !== "flyer") return "#90caf9";
+    return base;
   }
 
   function drawEnemy(e) {
     const rad = e.radius * cellSize;
-    const slowed = e.slowMul < 1;
     const now = performance.now() / 1000;
+    const slowed = e.slowMul < 1;
     const flash = e.hitFlash && now < e.hitFlash;
 
-    // 减速光环
     if (slowed) {
       ctx.beginPath();
       ctx.arc(e.x, e.y, rad + 5, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(129,212,250,0.32)";
+      ctx.fillStyle = "rgba(129,212,250,0.3)";
       ctx.fill();
-      ctx.strokeStyle = "rgba(179,229,252,0.5)";
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, rad + 2, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(179,229,252,0.55)";
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }
 
     ctx.save();
     ctx.translate(e.x, e.y);
-    ctx.rotate(e.angle);
+    if (e.angle != null) ctx.rotate(e.angle);
 
-    const fill = flash ? "#ffffff" : (slowed && e.kind !== "flyer" ? "#90caf9" : e.color);
-    const stroke = e.colorDark;
-
-    if (e.kind === "fast") {
-      // 菱形快跑
-      ctx.fillStyle = fill;
-      ctx.beginPath();
-      ctx.moveTo(rad * 1.2, 0);
-      ctx.lineTo(0, -rad * 0.75);
-      ctx.lineTo(-rad * 0.7, 0);
-      ctx.lineTo(0, rad * 0.75);
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = stroke;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      // 速度条纹
-      if (!flash) {
-        ctx.strokeStyle = "rgba(255,255,255,0.35)";
-        ctx.beginPath();
-        ctx.moveTo(-rad * 0.2, -rad * 0.3);
-        ctx.lineTo(-rad * 0.9, -rad * 0.15);
-        ctx.moveTo(-rad * 0.2, rad * 0.3);
-        ctx.lineTo(-rad * 0.9, rad * 0.15);
-        ctx.stroke();
-      }
-    } else if (e.kind === "tank") {
-      // 厚装甲六边形
-      ctx.fillStyle = fill;
-      ctx.beginPath();
-      for (let i = 0; i < 6; i++) {
-        const a = (Math.PI / 3) * i + Math.PI / 6;
-        const px = Math.cos(a) * rad;
-        const py = Math.sin(a) * rad;
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      }
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = stroke;
-      ctx.lineWidth = 2.5;
-      ctx.stroke();
-      ctx.fillStyle = flash ? "#fff" : "#6d4c41";
-      ctx.beginPath();
-      ctx.arc(0, 0, rad * 0.35, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (e.kind === "boss") {
-      // 大型+皇冠
-      ctx.fillStyle = fill;
-      ctx.beginPath();
-      ctx.arc(0, 0, rad, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "#e1bee7";
-      ctx.lineWidth = 2.5;
-      ctx.stroke();
-      // 甲片
-      ctx.strokeStyle = stroke;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(0, 0, rad * 0.65, 0, Math.PI * 2);
-      ctx.stroke();
-      // 冠
-      ctx.fillStyle = flash ? "#fff" : "#ffd54f";
-      ctx.beginPath();
-      ctx.moveTo(-rad * 0.55, -rad * 0.55);
-      ctx.lineTo(-rad * 0.3, -rad * 1.05);
-      ctx.lineTo(-rad * 0.1, -rad * 0.6);
-      ctx.lineTo(0, -rad * 1.15);
-      ctx.lineTo(rad * 0.1, -rad * 0.6);
-      ctx.lineTo(rad * 0.3, -rad * 1.05);
-      ctx.lineTo(rad * 0.55, -rad * 0.55);
-      ctx.closePath();
-      ctx.fill();
-    } else if (e.kind === "shield") {
-      // 圆身 + 前方盾牌
-      ctx.fillStyle = fill;
-      ctx.beginPath();
-      ctx.arc(0, 0, rad * 0.75, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = stroke;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      // 盾
-      ctx.fillStyle = flash ? "#eceff1" : "#607d8b";
-      ctx.beginPath();
-      ctx.moveTo(rad * 0.35, -rad * 0.85);
-      ctx.lineTo(rad * 1.15, -rad * 0.55);
-      ctx.lineTo(rad * 1.15, rad * 0.55);
-      ctx.lineTo(rad * 0.35, rad * 0.85);
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = "#263238";
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      ctx.strokeStyle = flash ? "#fff" : "#90a4ae";
-      ctx.beginPath();
-      ctx.moveTo(rad * 0.55, -rad * 0.4);
-      ctx.lineTo(rad * 0.55, rad * 0.4);
-      ctx.stroke();
-    } else if (e.kind === "flyer") {
-      // 飞影：椭圆翼 + 身体
-      ctx.globalAlpha = 0.9;
-      ctx.fillStyle = fill;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, rad * 1.3, rad * 0.55, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = flash ? "#fff" : e.colorDark;
-      ctx.beginPath();
-      ctx.ellipse(rad * 0.15, 0, rad * 0.55, rad * 0.35, 0, 0, Math.PI * 2);
-      ctx.fill();
-      // 翼尖光点
-      ctx.fillStyle = "#e0f7fa";
-      ctx.beginPath();
-      ctx.arc(-rad * 1.1, 0, 2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = "rgba(128,222,234,0.6)";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, rad * 1.35, rad * 0.6, 0, 0, Math.PI * 2);
-      ctx.stroke();
-    } else {
-      // 步兵：圆 + 头盔饰条
-      ctx.fillStyle = fill;
-      ctx.beginPath();
-      ctx.arc(0, 0, rad, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = stroke;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      ctx.fillStyle = flash ? "#fff" : "#b71c1c";
-      ctx.fillRect(-rad * 0.55, -rad * 0.95, rad * 1.1, rad * 0.35);
-      ctx.fillStyle = flash ? "#fff" : "#ffcdd2";
-      ctx.fillRect(-rad * 0.15, -rad * 1.05, rad * 0.3, rad * 0.2);
-    }
+    if (e.kind === "fast") drawEnemyFast(e, rad, flash, slowed);
+    else if (e.kind === "tank") drawEnemyTank(e, rad, flash, slowed);
+    else if (e.kind === "boss") drawEnemyBoss(e, rad, flash, slowed, now);
+    else if (e.kind === "shield") drawEnemyShield(e, rad, flash, slowed);
+    else if (e.kind === "flyer") drawEnemyFlyer(e, rad, flash, slowed);
+    else drawEnemyNormal(e, rad, flash, slowed);
 
     ctx.restore();
+    drawEnemyHpBar(e, rad);
+  }
 
-    // 血条
+  function drawEnemyNormal(e, rad, flash, slow) {
+    const fill = bodyFill(e.color, flash, slow, e.kind);
+    ctx.beginPath();
+    ctx.ellipse(0, rad * 0.08, rad * 0.95, rad * 0.78, 0, 0, Math.PI * 2);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = e.colorDark || "rgba(0,0,0,0.35)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    if (!flash) {
+      ctx.beginPath();
+      ctx.ellipse(-rad * 0.25, -rad * 0.15, rad * 0.35, rad * 0.22, -0.4, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,255,255,0.28)";
+      ctx.fill();
+    }
+    ctx.strokeStyle = fill;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-rad * 0.25, -rad * 0.55);
+    ctx.quadraticCurveTo(-rad * 0.35, -rad * 1.05, -rad * 0.15, -rad * 1.05);
+    ctx.moveTo(rad * 0.25, -rad * 0.55);
+    ctx.quadraticCurveTo(rad * 0.35, -rad * 1.05, rad * 0.15, -rad * 1.05);
+    ctx.stroke();
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.arc(-rad * 0.15, -rad * 1.05, 2.2, 0, Math.PI * 2);
+    ctx.arc(rad * 0.15, -rad * 1.05, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = flash ? "#333" : "#1a120c";
+    ctx.beginPath();
+    ctx.arc(-rad * 0.28, -rad * 0.05, rad * 0.18, 0, Math.PI * 2);
+    ctx.arc(rad * 0.28, -rad * 0.05, rad * 0.18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(-rad * 0.22, -rad * 0.1, rad * 0.07, 0, Math.PI * 2);
+    ctx.arc(rad * 0.34, -rad * 0.1, rad * 0.07, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawEnemyFast(e, rad, flash, slow) {
+    const fill = bodyFill(e.color, flash, slow, e.kind);
+    if (!flash) {
+      ctx.globalAlpha = 0.25;
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.moveTo(-rad * 1.4, 0);
+      ctx.lineTo(-rad * 0.4, -rad * 0.35);
+      ctx.lineTo(-rad * 0.4, rad * 0.35);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    ctx.beginPath();
+    ctx.moveTo(rad * 1.15, 0);
+    ctx.lineTo(-rad * 0.15, -rad * 0.55);
+    ctx.lineTo(-rad * 0.85, 0);
+    ctx.lineTo(-rad * 0.15, rad * 0.55);
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = e.colorDark || "rgba(0,0,0,0.35)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, -rad * 0.2);
+    ctx.lineTo(-rad * 0.3, -rad * 0.95);
+    ctx.lineTo(-rad * 0.5, -rad * 0.15);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(0, rad * 0.2);
+    ctx.lineTo(-rad * 0.3, rad * 0.95);
+    ctx.lineTo(-rad * 0.5, rad * 0.15);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = flash ? "#333" : "#5d4037";
+    ctx.beginPath();
+    ctx.arc(rad * 0.35, 0, rad * 0.16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(rad * 0.4, -rad * 0.05, rad * 0.06, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawEnemyTank(e, rad, flash, slow) {
+    const fill = bodyFill(e.color, flash, slow, e.kind);
+    const dark = flash ? "#bbb" : (slow ? "#64b5f6" : (e.colorDark || "#5d4037"));
+    roundRectPath(-rad * 0.85, -rad * 0.7, rad * 1.7, rad * 1.4, rad * 0.25);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    roundRectPath(-rad * 1.05, -rad * 0.55, rad * 0.35, rad * 1.1, 3);
+    roundRectPath(rad * 0.7, -rad * 0.55, rad * 0.35, rad * 1.1, 3);
+    ctx.fillStyle = dark;
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.25)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-rad * 0.5, -rad * 0.2);
+    ctx.lineTo(rad * 0.5, -rad * 0.2);
+    ctx.moveTo(-rad * 0.5, rad * 0.25);
+    ctx.lineTo(rad * 0.5, rad * 0.25);
+    ctx.stroke();
+    ctx.fillStyle = flash ? "#333" : "#ffcc80";
+    ctx.fillRect(-rad * 0.35, -rad * 0.15, rad * 0.7, rad * 0.22);
+    ctx.fillStyle = "#1a120c";
+    ctx.fillRect(-rad * 0.25, -rad * 0.08, rad * 0.2, rad * 0.1);
+    ctx.fillRect(rad * 0.05, -rad * 0.08, rad * 0.2, rad * 0.1);
+  }
+
+  function drawEnemyBoss(e, rad, flash, slow, now) {
+    const fill = bodyFill(e.color, flash, slow, e.kind);
+    const pulse = 1 + Math.sin(now * 3) * 0.06;
+    ctx.beginPath();
+    ctx.arc(0, 0, rad * 1.25 * pulse, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(225,190,231,0.45)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, rad * 1.1, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(186,104,200,0.5)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, rad, 0, Math.PI * 2);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = "#7b1fa2";
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, rad * 0.05, rad * 0.65, 0, Math.PI * 2);
+    ctx.fillStyle = flash ? "#eee" : (slow ? "#b3e5fc" : "#ab47bc");
+    ctx.fill();
+    ctx.fillStyle = flash ? "#fff" : "#e1bee7";
+    ctx.beginPath();
+    ctx.moveTo(-rad * 0.55, -rad * 0.55);
+    ctx.lineTo(-rad * 0.35, -rad * 1.15);
+    ctx.lineTo(-rad * 0.1, -rad * 0.55);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(rad * 0.55, -rad * 0.55);
+    ctx.lineTo(rad * 0.35, -rad * 1.15);
+    ctx.lineTo(rad * 0.1, -rad * 0.55);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-rad * 0.12, -rad * 0.7);
+    ctx.lineTo(0, -rad * 1.35);
+    ctx.lineTo(rad * 0.12, -rad * 0.7);
+    ctx.closePath();
+    ctx.fillStyle = flash ? "#fff" : "#f3e5f5";
+    ctx.fill();
+    ctx.strokeStyle = "#6a1b9a";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = flash ? "#333" : "#1a120c";
+    ctx.beginPath();
+    ctx.arc(-rad * 0.28, -rad * 0.05, rad * 0.2, 0, Math.PI * 2);
+    ctx.arc(rad * 0.28, -rad * 0.05, rad * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#ff4081";
+    ctx.beginPath();
+    ctx.arc(-rad * 0.22, -rad * 0.08, rad * 0.08, 0, Math.PI * 2);
+    ctx.arc(rad * 0.34, -rad * 0.08, rad * 0.08, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawEnemyShield(e, rad, flash, slow) {
+    const fill = bodyFill(e.color, flash, slow, e.kind);
+    ctx.beginPath();
+    ctx.arc(0, 0, rad * 0.75, 0, Math.PI * 2);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = e.colorDark || "#455a64";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // 盔饰
+    ctx.fillStyle = flash ? "#fff" : "#37474f";
+    ctx.fillRect(-rad * 0.4, -rad * 0.85, rad * 0.8, rad * 0.28);
+    // 前方厚盾（分层）
+    ctx.fillStyle = flash ? "#eceff1" : "#607d8b";
+    ctx.beginPath();
+    ctx.moveTo(rad * 0.3, -rad * 0.9);
+    ctx.lineTo(rad * 1.2, -rad * 0.55);
+    ctx.lineTo(rad * 1.25, 0);
+    ctx.lineTo(rad * 1.2, rad * 0.55);
+    ctx.lineTo(rad * 0.3, rad * 0.9);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "#263238";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.strokeStyle = flash ? "#fff" : "#90a4ae";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(rad * 0.55, -rad * 0.45);
+    ctx.lineTo(rad * 0.55, rad * 0.45);
+    ctx.moveTo(rad * 0.55, 0);
+    ctx.lineTo(rad * 1.05, 0);
+    ctx.stroke();
+    // 盾徽
+    ctx.beginPath();
+    ctx.arc(rad * 0.8, 0, rad * 0.18, 0, Math.PI * 2);
+    ctx.fillStyle = flash ? "#fff" : "#ffd54f";
+    ctx.fill();
+  }
+
+  function drawEnemyFlyer(e, rad, flash, slow) {
+    const fill = bodyFill(e.color, flash, slow, e.kind);
+    ctx.globalAlpha = 0.88;
+    // 翼
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rad * 1.35, rad * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // 翼骨
+    ctx.strokeStyle = e.colorDark || "#00838f";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-rad * 1.2, 0);
+    ctx.lineTo(rad * 0.9, 0);
+    ctx.stroke();
+    // 身体
+    ctx.fillStyle = flash ? "#fff" : (e.colorDark || "#00838f");
+    ctx.beginPath();
+    ctx.ellipse(rad * 0.2, 0, rad * 0.55, rad * 0.32, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // 头
+    ctx.beginPath();
+    ctx.arc(rad * 0.7, 0, rad * 0.22, 0, Math.PI * 2);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.fillStyle = flash ? "#333" : "#004d40";
+    ctx.beginPath();
+    ctx.arc(rad * 0.78, -rad * 0.05, rad * 0.08, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#e0f7fa";
+    ctx.beginPath();
+    ctx.arc(-rad * 1.15, 0, 2, 0, Math.PI * 2);
+    ctx.arc(-rad * 0.3, -rad * 0.35, 1.5, 0, Math.PI * 2);
+    ctx.arc(-rad * 0.3, rad * 0.35, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = "rgba(128,222,234,0.55)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rad * 1.4, rad * 0.55, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  function drawEnemyHpBar(e, rad) {
     const bw = Math.max(rad * 2.4, 16);
-    const bh = e.kind === "boss" ? 5 : 3.5;
+    const bh = e.kind === "boss" ? 5 : 4;
     const bx = e.x - bw / 2;
-    const by = e.y - rad - (e.kind === "boss" ? 14 : 9);
+    const by = e.y - rad - (e.kind === "boss" ? 14 : 10);
+    roundRectPath(bx - 1, by - 1, bw + 2, bh + 2, 2);
     ctx.fillStyle = "rgba(0,0,0,0.55)";
-    ctx.fillRect(bx - 0.5, by - 0.5, bw + 1, bh + 1);
+    ctx.fill();
     const ratio = Math.max(0, e.hp / e.maxHp);
-    ctx.fillStyle = ratio > 0.5 ? "#66bb6a" : ratio > 0.25 ? "#ffb74d" : "#ef5350";
-    ctx.fillRect(bx, by, bw * ratio, bh);
+    const col = ratio > 0.5 ? "#66bb6a" : ratio > 0.25 ? "#ffb74d" : "#ef5350";
+    if (ratio > 0) {
+      roundRectPath(bx, by, bw * ratio, bh, 1.5);
+      ctx.fillStyle = col;
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.25)";
+      ctx.fillRect(bx + 1, by + 1, Math.max(0, bw * ratio - 2), 1.5);
+    }
     if (e.kind === "boss") {
-      ctx.strokeStyle = "rgba(225,190,231,0.5)";
+      ctx.strokeStyle = "rgba(225,190,231,0.55)";
       ctx.lineWidth = 1;
       ctx.strokeRect(bx - 0.5, by - 0.5, bw + 1, bh + 1);
     }
   }
+
 
   // ---------- 主循环 ----------
   let last = performance.now() / 1000;
