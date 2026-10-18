@@ -286,6 +286,20 @@
     toast._t = setTimeout(() => elToast.classList.add("hidden"), ms);
   }
 
+  function sfx(name, variant) {
+    try {
+      const api = window.CoinpathAudio;
+      if (api) api.play(name, variant);
+    } catch (_) {}
+  }
+
+  function sfxShot(style) {
+    try {
+      const api = window.CoinpathAudio;
+      if (api) api.playShot(style);
+    } catch (_) {}
+  }
+
   function dist(ax, ay, bx, by) {
     return Math.hypot(ax - bx, ay - by);
   }
@@ -594,6 +608,7 @@
     else if (hasBoss) label = `⚠ 第 ${n} 波 · Boss 来袭！`;
     else if (n === 15 || n === 20 || n === 25) label = `第 ${n} 波 · 小高潮！`;
     toast(label, hasBoss || n === 30 ? 2400 : 1600);
+    sfx("wave");
   }
 
   function beginCountdown(nextWave) {
@@ -641,6 +656,7 @@
   function winGame() {
     state.phase = "won";
     state.ended = true;
+    sfx("victory");
     showEnd(true);
     try {
       const best = Number(localStorage.getItem("coinpath_best_wave") || 0);
@@ -651,6 +667,7 @@
   function loseGame() {
     state.phase = "lost";
     state.ended = true;
+    sfx("defeat");
     showEnd(false);
   }
 
@@ -790,6 +807,7 @@
     const existing = towerAt(c, r);
     if (existing) {
       selectTower(existing);
+      sfx("click");
       return;
     }
     if (state.buildType) {
@@ -807,6 +825,7 @@
       const tower = new Tower(state.buildType, c, r);
       state.towers.push(tower);
       spawnParticle(tower.x, tower.y, tower.color, 8);
+      sfx("build", tower.type);
       selectTower(tower);
       toast(`建造 ${tower.name}`);
       updateHUD();
@@ -842,6 +861,7 @@
 
   towerBtns.forEach((btn) => {
     btn.addEventListener("click", () => {
+      sfx("click");
       if (state.ended) return;
       const type = btn.dataset.type;
       if (state.gold < TOWER_DEFS[type].cost) {
@@ -858,6 +878,7 @@
   btnUpgrade.addEventListener("click", () => {
     if (!state.selected || state.ended) return;
     if (state.selected.upgrade()) {
+      sfx("upgrade");
       toast(`升级至 Lv.${state.selected.level}`);
       updateHUD();
     } else {
@@ -871,6 +892,7 @@
     const val = t.sellValue();
     state.gold += val;
     state.towers = state.towers.filter((x) => x !== t);
+    sfx("sell");
     toast(`卖掉 +${val} 金币`);
     deselect();
     updateHUD();
@@ -880,6 +902,7 @@
 
   btnNextWave.addEventListener("click", () => {
     if (state.ended) return;
+    sfx("click");
     if (state.phase === "idle") {
       startWave(1);
       return;
@@ -889,7 +912,10 @@
     }
   });
 
-  btnRestart.addEventListener("click", resetGame);
+  btnRestart.addEventListener("click", () => {
+    sfx("click");
+    resetGame();
+  });
 
   // ---------- 战斗逻辑 ----------
   function findTarget(tower) {
@@ -922,6 +948,9 @@
       state.gold += e.reward;
       const n = e.kind === "boss" ? 14 : e.kind === "tank" ? 10 : 7;
       spawnParticle(e.x, e.y, e.color, n);
+      sfx("death", e.kind);
+    } else {
+      sfx("hit");
     }
   }
 
@@ -929,6 +958,7 @@
     p.alive = false;
     const target = p.target;
     if (p.splash > 0) {
+      sfx("boom");
       for (const e of state.enemies) {
         if (e.dead || e.escaped) continue;
         const d = dist(p.tx, p.ty, e.x, e.y);
@@ -956,7 +986,11 @@
     if (state.ended) return;
 
     if (state.phase === "countdown") {
+      const prevCountdown = state.countdown;
       state.countdown -= dt;
+      const prevSec = Math.ceil(prevCountdown);
+      const nextSec = Math.ceil(Math.max(0, state.countdown));
+      if (nextSec < prevSec && nextSec >= 1 && nextSec <= 3) sfx("tick");
       updateCountdownBtn();
       if (state.countdown <= 0) {
         btnNextWave.classList.remove("waiting");
@@ -997,6 +1031,7 @@
           loseGame();
           return;
         }
+        sfx("leak");
         updateHUD();
         continue;
       }
@@ -1019,6 +1054,7 @@
           state.projectiles.push(new Projectile(t, target, now));
           t.cooldown = 1 / t.rate;
           t.muzzleFlash = 0.08;
+          sfxShot(t.projectile);
         }
       }
     }
