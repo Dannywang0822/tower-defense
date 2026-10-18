@@ -53,6 +53,8 @@ html, body {
 #app {
   width: 100%;
   max-width: 480px;
+  container-type: inline-size;
+  container-name: game;
   height: 100%;
   height: 100dvh;
   max-height: 100dvh;
@@ -70,6 +72,8 @@ html, body {
   flex-wrap: nowrap;
   gap: 4px 8px;
   align-items: center;
+  min-width: 0;
+  max-width: 100%;
   background: linear-gradient(180deg, rgba(48, 40, 28, 0.96) 0%, rgba(28, 24, 18, 0.94) 100%);
   border: 1px solid var(--panel-border);
   border-radius: var(--radius);
@@ -102,12 +106,14 @@ html, body {
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 40%;
+  max-width: 28%;
   min-width: 0;
+  flex: 1 1 auto;
   padding: 3px 8px;
   background: transparent;
   border: none;
 }
+.hud-tools { display: contents; }
 .hud-audio {
   appearance: none;
   -webkit-appearance: none;
@@ -132,6 +138,52 @@ html, body {
 .hud-audio:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+.hud-speed {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding: 2px 4px 2px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(212, 175, 85, 0.12);
+}
+.speed-label {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.speed-btns {
+  display: flex;
+  gap: 2px;
+}
+.speed-btn {
+  min-width: 32px;
+  min-height: 28px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.speed-btn:hover {
+  color: var(--text);
+  border-color: rgba(212, 175, 85, 0.35);
+}
+.speed-btn.active {
+  color: #1a140c;
+  background: linear-gradient(135deg, #c9a227, #e8d48b);
+  border-color: #e8d48b;
+  box-shadow: 0 0 8px rgba(201, 162, 39, 0.35);
 }
 #stage-wrap {
   position: relative;
@@ -399,5 +451,46 @@ html, body {
   .hint { display: none; }
   .tb-desc { display: none; }
   .panel-title { display: none; }
+  .speed-label { display: none; }
+  .speed-btn { min-width: 28px; min-height: 26px; font-size: 11px; padding: 2px 4px; }
+  .hud-status { max-width: 22%; }
   .hud-audio { font-size: 10px; padding: 2px 6px; min-height: 20px; }
+}
+
+@media (max-width: 460px) {
+  #hud { gap: 3px; padding-left: 6px; padding-right: 6px; }
+  .hud-item { flex-shrink: 0; padding: 2px 5px; gap: 3px; }
+  .hud-status { flex: 1 1 auto; flex-shrink: 1; min-width: 0; }
+  .speed-label { display: none; }
+  .hud-speed { padding: 1px 2px; gap: 0; }
+  .speed-btns { gap: 1px; }
+  .speed-btn { min-width: 22px; min-height: 24px; font-size: 10px; padding: 1px 2px; }
+  .hud-status { max-width: none; font-size: 10px; padding: 2px 3px; }
+  .hud-audio { font-size: 10px; padding: 2px 6px; min-height: 22px; }
+}
+
+@media (max-width: 400px) {
+  #hud { flex-wrap: wrap; row-gap: 4px; }
+  .hud-status {
+    order: 2;
+    flex: 1 1 auto;
+    min-width: 3.2em;
+    max-width: none;
+  }
+  .hud-tools {
+    display: flex;
+    flex: 1 0 100%;
+    order: 3;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .speed-btn { min-width: 28px; min-height: 26px; font-size: 11px; padding: 2px 4px; }
+}
+
+@container game (max-width: 520px) {
+  .speed-label { display: none; }
+  .hud-speed { padding: 2px 3px; gap: 2px; }
+  .speed-btn { min-width: 26px; min-height: 26px; font-size: 11px; padding: 2px 4px; }
+  .hud-status { max-width: none; }
 }
