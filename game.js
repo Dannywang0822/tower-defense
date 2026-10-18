@@ -1064,44 +1064,71 @@
   function draw() {
     const w = canvas.width;
     const h = canvas.height;
+    const now = performance.now() / 1000;
     ctx.clearRect(0, 0, w, h);
+
+    // 氛围底：微弱纵向渐变
+    const sky = ctx.createLinearGradient(0, 0, 0, h);
+    sky.addColorStop(0, "#0e1824");
+    sky.addColorStop(0.55, "#0c141c");
+    sky.addColorStop(1, "#0a1210");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, w, h);
 
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
         const x = c * cellSize;
         const y = r * cellSize;
         if (isPath(c, r)) {
-          ctx.fillStyle = "#1a2430";
+          ctx.fillStyle = "#15202c";
           ctx.fillRect(x, y, cellSize, cellSize);
         } else {
-          ctx.fillStyle = (c + r) % 2 === 0 ? "#152018" : "#1a281f";
+          const even = (c + r) % 2 === 0;
+          ctx.fillStyle = even ? "#14301c" : "#183624";
           ctx.fillRect(x, y, cellSize, cellSize);
-          ctx.fillStyle = "rgba(80,140,90,0.12)";
-          const seed = (c * 17 + r * 31) & 7;
-          if (seed < 3) {
-            ctx.fillRect(x + cellSize * 0.2, y + cellSize * 0.35, 1.5, 1.5);
-            ctx.fillRect(x + cellSize * 0.65, y + cellSize * 0.7, 1.5, 1.5);
+          // 草地微点 + 偶发光斑
+          const seed = (c * 17 + r * 31) & 15;
+          if (seed < 4) {
+            ctx.fillStyle = "rgba(100,180,110,0.14)";
+            ctx.fillRect(x + cellSize * 0.22, y + cellSize * 0.38, 1.8, 1.8);
+            ctx.fillRect(x + cellSize * 0.62, y + cellSize * 0.68, 1.6, 1.6);
+          } else if (seed === 5) {
+            ctx.fillStyle = "rgba(180,220,120,0.1)";
+            ctx.beginPath();
+            ctx.arc(x + cellSize * 0.5, y + cellSize * 0.45, 1.2, 0, Math.PI * 2);
+            ctx.fill();
           }
         }
       }
     }
 
     if (pathPoints.length > 1) {
+      // 路径外发光
       ctx.beginPath();
       ctx.moveTo(pathPoints[0].x, pathPoints[0].y);
       for (let i = 1; i < pathPoints.length; i++) {
         ctx.lineTo(pathPoints[i].x, pathPoints[i].y);
       }
-      ctx.strokeStyle = "#2a3d52";
-      ctx.lineWidth = cellSize * 0.62;
+      ctx.strokeStyle = "rgba(79,195,247,0.12)";
+      ctx.lineWidth = cellSize * 0.85;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.stroke();
-      ctx.strokeStyle = "#3d5a73";
-      ctx.lineWidth = cellSize * 0.38;
+      // 石板外缘
+      ctx.strokeStyle = "#243848";
+      ctx.lineWidth = cellSize * 0.64;
       ctx.stroke();
-      ctx.setLineDash([5, 7]);
-      ctx.strokeStyle = "rgba(79,195,247,0.28)";
+      // 内道
+      ctx.strokeStyle = "#3a556e";
+      ctx.lineWidth = cellSize * 0.4;
+      ctx.stroke();
+      // 中心高光带
+      ctx.strokeStyle = "rgba(160,200,230,0.22)";
+      ctx.lineWidth = cellSize * 0.12;
+      ctx.stroke();
+      // 虚线行进指引
+      ctx.setLineDash([4, 8]);
+      ctx.strokeStyle = "rgba(79,195,247,0.38)";
       ctx.lineWidth = 1.5;
       ctx.stroke();
       ctx.setLineDash([]);
@@ -1109,28 +1136,28 @@
 
     const entry = pathPoints[0];
     const exit = pathPoints[pathPoints.length - 1];
-    drawGate(entry.x, entry.y, "#66bb6a", "入");
-    drawGate(exit.x, exit.y, "#ef5350", "出");
+    drawGate(entry.x, entry.y, "#66bb6a", "入", now);
+    drawGate(exit.x, exit.y, "#ef5350", "出", now);
 
-    // 放置预览（更清晰）
+    // 放置预览
     if (state.buildType && state.hoverCell) {
       const { c, r } = state.hoverCell;
       if (c >= 0 && r >= 0 && c < COLS && r < ROWS) {
         const ok = canPlace(c, r);
         const p = cellCenter(c, r);
         const def = TOWER_DEFS[state.buildType];
-        ctx.fillStyle = ok ? "rgba(79,195,247,0.28)" : "rgba(239,83,80,0.35)";
-        ctx.fillRect(c * cellSize + 1, r * cellSize + 1, cellSize - 2, cellSize - 2);
-        ctx.strokeStyle = ok ? "rgba(79,195,247,0.85)" : "rgba(239,83,80,0.85)";
+        ctx.fillStyle = ok ? "rgba(79,195,247,0.22)" : "rgba(239,83,80,0.28)";
+        ctx.fillRect(c * cellSize + 2, r * cellSize + 2, cellSize - 4, cellSize - 4);
+        ctx.strokeStyle = ok ? "rgba(79,195,247,0.9)" : "rgba(239,83,80,0.9)";
         ctx.lineWidth = 2;
-        ctx.strokeRect(c * cellSize + 1.5, r * cellSize + 1.5, cellSize - 3, cellSize - 3);
+        ctx.strokeRect(c * cellSize + 2, r * cellSize + 2, cellSize - 4, cellSize - 4);
         ctx.beginPath();
         ctx.arc(p.x, p.y, def.range * cellSize, 0, Math.PI * 2);
-        ctx.fillStyle = ok ? "rgba(79,195,247,0.08)" : "rgba(239,83,80,0.08)";
+        ctx.fillStyle = ok ? "rgba(79,195,247,0.07)" : "rgba(239,83,80,0.07)";
         ctx.fill();
-        ctx.strokeStyle = ok ? "rgba(79,195,247,0.55)" : "rgba(239,83,80,0.55)";
+        ctx.strokeStyle = ok ? "rgba(79,195,247,0.5)" : "rgba(239,83,80,0.5)";
         ctx.lineWidth = 1.5;
-        ctx.setLineDash([4, 4]);
+        ctx.setLineDash([5, 5]);
         ctx.stroke();
         ctx.setLineDash([]);
       }
@@ -1138,20 +1165,25 @@
 
     if (state.selected) {
       const t = state.selected;
+      const pulse = 0.35 + Math.sin(now * 3.2) * 0.08;
       ctx.beginPath();
       ctx.arc(t.x, t.y, t.range * cellSize, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(255,255,255,0.07)";
+      ctx.fillStyle = `rgba(255,213,79,${pulse * 0.22})`;
       ctx.fill();
-      ctx.strokeStyle = "rgba(255,255,255,0.4)";
+      ctx.strokeStyle = `rgba(255,213,79,${0.45 + pulse})`;
       ctx.lineWidth = 1.5;
       ctx.setLineDash([6, 4]);
       ctx.stroke();
       ctx.setLineDash([]);
-      // 选中高亮底座
       ctx.beginPath();
-      ctx.arc(t.x, t.y, cellSize * 0.38, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(255,213,79,0.7)";
-      ctx.lineWidth = 2;
+      ctx.arc(t.x, t.y, cellSize * 0.4, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255,213,79,0.85)";
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, cellSize * 0.48, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255,213,79,0.25)";
+      ctx.lineWidth = 4;
       ctx.stroke();
     }
 
@@ -1161,7 +1193,7 @@
       drawEnemy(e);
     }
 
-    // 爆炸（环 + 碎片）
+    // 爆炸
     for (const ex of state.explosions) {
       const a = Math.max(0, ex.life / ex.maxLife);
       ctx.beginPath();
@@ -1171,10 +1203,10 @@
       ctx.stroke();
       ctx.beginPath();
       ctx.arc(ex.x, ex.y, ex.r * 0.55, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(255,220,120,${a * 0.7})`;
+      ctx.strokeStyle = `rgba(255,220,120,${a * 0.75})`;
       ctx.lineWidth = 2;
       ctx.stroke();
-      ctx.fillStyle = `rgba(255,180,80,${a * 0.18})`;
+      ctx.fillStyle = `rgba(255,180,80,${a * 0.2})`;
       ctx.beginPath();
       ctx.arc(ex.x, ex.y, ex.r * 0.4, 0, Math.PI * 2);
       ctx.fill();
@@ -1203,14 +1235,31 @@
       ctx.globalAlpha = 1;
     }
 
-    ctx.fillStyle = "rgba(255,255,255,0.06)";
-    ctx.font = `600 ${Math.max(12, cellSize * 0.35)}px ${getComputedStyle(document.body).fontFamily}`;
+    // 轻 vignette
+    const vig = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.max(w, h) * 0.72);
+    vig.addColorStop(0, "rgba(0,0,0,0)");
+    vig.addColorStop(1, "rgba(0,0,0,0.28)");
+    ctx.fillStyle = vig;
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.fillStyle = "rgba(200,220,240,0.08)";
+    ctx.font = `600 ${Math.max(11, cellSize * 0.32)}px ${getComputedStyle(document.body).fontFamily}`;
     ctx.textAlign = "center";
-    ctx.fillText("路卫 Coinpath", w / 2, cellSize * 0.45);
+    ctx.fillText("路卫 Coinpath", w / 2, cellSize * 0.42);
   }
 
   function drawProjectile(p) {
+    // 短拖尾
+    const speed = Math.hypot(p.vx, p.vy) || 1;
+    const tx = (p.vx / speed) * 8;
+    const ty = (p.vy / speed) * 8;
     if (p.style === "cannon") {
+      ctx.strokeStyle = "rgba(255,171,118,0.35)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(p.x - tx, p.y - ty);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
       ctx.beginPath();
       ctx.arc(p.x, p.y, 5.5, 0, Math.PI * 2);
       ctx.fillStyle = "#ffab76";
@@ -1225,6 +1274,12 @@
       ctx.arc(p.x, p.y, 5.5, 0, Math.PI * 2);
       ctx.stroke();
     } else if (p.style === "frost") {
+      ctx.strokeStyle = "rgba(129,212,250,0.4)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(p.x - tx * 0.8, p.y - ty * 0.8);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
       ctx.save();
       ctx.translate(p.x, p.y);
       ctx.strokeStyle = "#e1f5fe";
@@ -1242,6 +1297,12 @@
       ctx.fill();
       ctx.restore();
     } else {
+      ctx.strokeStyle = "rgba(200,230,201,0.4)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(p.x - tx, p.y - ty);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
       ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(Math.atan2(p.vy, p.vx));
@@ -1266,18 +1327,26 @@
     }
   }
 
-  function drawGate(x, y, color, label) {
+  function drawGate(x, y, color, label, now) {
     const r = cellSize * 0.32;
+    const pulse = 0.3 + Math.sin((now || 0) * 2.4 + (label === "入" ? 0 : 1.5)) * 0.12;
     ctx.beginPath();
-    ctx.arc(x, y, r + 3, 0, Math.PI * 2);
+    ctx.arc(x, y, r + 6, 0, Math.PI * 2);
     ctx.strokeStyle = color;
-    ctx.globalAlpha = 0.35;
-    ctx.lineWidth = 3;
+    ctx.globalAlpha = pulse;
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    ctx.arc(x, y, r + 2, 0, Math.PI * 2);
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.45;
+    ctx.lineWidth = 2.5;
     ctx.stroke();
     ctx.globalAlpha = 1;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = "#1e2836";
+    ctx.fillStyle = "#121a24";
     ctx.fill();
     ctx.strokeStyle = color;
     ctx.lineWidth = 2.5;
@@ -1285,10 +1354,10 @@
     ctx.beginPath();
     ctx.arc(x, y, r * 0.62, 0, Math.PI * 2);
     ctx.fillStyle = color;
-    ctx.globalAlpha = 0.9;
+    ctx.globalAlpha = 0.92;
     ctx.fill();
     ctx.globalAlpha = 1;
-    ctx.fillStyle = "#0f1620";
+    ctx.fillStyle = "#0a1018";
     ctx.font = `700 ${Math.max(10, cellSize * 0.26)}px sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -1306,12 +1375,19 @@
     ctx.closePath();
   }
 
+  function drawGroundShadow(x, y, rx, ry) {
+    ctx.beginPath();
+    ctx.ellipse(x, y + ry * 0.85, rx, ry * 0.35, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(0,0,0,0.28)";
+    ctx.fill();
+  }
+
   function drawTowerLevelMarks(t, s) {
     if (t.level <= 1) return;
     const n = t.level - 1;
     for (let i = 0; i < n; i++) {
       const ox = (i - (n - 1) / 2) * s * 0.14;
-      const gy = t.y - s * 0.4;
+      const gy = t.y - s * 0.42;
       if (t.type === "arrow") {
         ctx.fillStyle = "#ffd54f";
         ctx.fillRect(t.x + ox - 1, gy - s * 0.12, 2, s * 0.16);
@@ -1348,6 +1424,7 @@
 
   function drawTower(t) {
     const s = cellSize;
+    drawGroundShadow(t.x, t.y, s * 0.32, s * 0.28);
     if (t.type === "arrow") drawArrowTower(t, s);
     else if (t.type === "cannon") drawCannonTower(t, s);
     else drawFrostTower(t, s);
@@ -1356,6 +1433,12 @@
 
   function drawArrowTower(t, s) {
     const br = s * 0.3;
+    // 底座外环光
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, br + 2, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(102,187,106,0.25)";
+    ctx.lineWidth = 3;
+    ctx.stroke();
     ctx.beginPath();
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2 - Math.PI / 8;
@@ -1370,6 +1453,7 @@
     ctx.strokeStyle = "#3e2723";
     ctx.lineWidth = 1.5;
     ctx.stroke();
+    // 木质台面高光
     ctx.beginPath();
     ctx.arc(t.x, t.y, s * 0.2, 0, Math.PI * 2);
     ctx.fillStyle = "#8d6e63";
@@ -1377,6 +1461,10 @@
     ctx.strokeStyle = "#6d4c41";
     ctx.lineWidth = 1;
     ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(t.x - s * 0.06, t.y - s * 0.06, s * 0.08, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctx.fill();
     ctx.save();
     ctx.translate(t.x, t.y);
     ctx.rotate(t.angle);
@@ -1389,10 +1477,13 @@
     ctx.stroke();
     ctx.strokeStyle = "#c8e6c9";
     ctx.lineWidth = 2.5;
+    ctx.shadowColor = "rgba(102,187,106,0.45)";
+    ctx.shadowBlur = 4;
     ctx.beginPath();
     ctx.moveTo(s * 0.02, 0);
     ctx.lineTo(s * 0.32, 0);
     ctx.stroke();
+    ctx.shadowBlur = 0;
     ctx.fillStyle = "#ffecb3";
     ctx.beginPath();
     ctx.moveTo(s * 0.38, 0);
@@ -1414,6 +1505,11 @@
   function drawCannonTower(t, s) {
     const hw = s * 0.28;
     const hh = s * 0.26;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, Math.max(hw, hh) + 3, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(239,131,84,0.22)";
+    ctx.lineWidth = 3;
+    ctx.stroke();
     roundRectPath(t.x - hw, t.y - hh, hw * 2, hh * 2, 4);
     ctx.fillStyle = "#4e342e";
     ctx.fill();
@@ -1436,8 +1532,11 @@
     for (const [rx, ry] of rivets) {
       ctx.beginPath();
       ctx.arc(t.x + rx, t.y + ry, 2, 0, Math.PI * 2);
-      ctx.fillStyle = "#bcaaa4";
+      ctx.fillStyle = "#d7ccc8";
       ctx.fill();
+      ctx.strokeStyle = "#5d4037";
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
     }
     ctx.save();
     ctx.translate(t.x, t.y);
@@ -1451,14 +1550,17 @@
     ctx.beginPath();
     ctx.arc(s * 0.32, 0, s * 0.1, 0, Math.PI * 2);
     ctx.fillStyle = t.color || "#ef8354";
+    ctx.shadowColor = "rgba(239,131,84,0.5)";
+    ctx.shadowBlur = 5;
     ctx.fill();
+    ctx.shadowBlur = 0;
     ctx.beginPath();
     ctx.arc(s * 0.32, 0, s * 0.055, 0, Math.PI * 2);
     ctx.fillStyle = "#1a120c";
     ctx.fill();
     ctx.beginPath();
     ctx.arc(s * 0.28, -s * 0.04, 1.8, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255,236,179,0.7)";
+    ctx.fillStyle = "rgba(255,236,179,0.75)";
     ctx.fill();
     ctx.beginPath();
     ctx.arc(0, 0, s * 0.1, 0, Math.PI * 2);
@@ -1472,12 +1574,12 @@
 
   function drawFrostTower(t, s) {
     ctx.beginPath();
-    ctx.arc(t.x, t.y, s * 0.38, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(79,195,247,0.14)";
+    ctx.arc(t.x, t.y, s * 0.4, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(79,195,247,0.12)";
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(t.x, t.y, s * 0.28, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(129,212,250,0.18)";
+    ctx.arc(t.x, t.y, s * 0.3, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(129,212,250,0.16)";
     ctx.fill();
     ctx.beginPath();
     for (let i = 0; i < 6; i++) {
@@ -1492,7 +1594,10 @@
     ctx.fill();
     ctx.strokeStyle = t.color || "#4fc3f7";
     ctx.lineWidth = 1.5;
+    ctx.shadowColor = "rgba(79,195,247,0.45)";
+    ctx.shadowBlur = 6;
     ctx.stroke();
+    ctx.shadowBlur = 0;
     ctx.save();
     ctx.translate(t.x, t.y);
     ctx.beginPath();
@@ -1503,7 +1608,7 @@
     ctx.lineTo(-s * 0.12, -s * 0.04);
     ctx.closePath();
     ctx.fillStyle = t.color || "#4fc3f7";
-    ctx.globalAlpha = 0.85;
+    ctx.globalAlpha = 0.88;
     ctx.fill();
     ctx.globalAlpha = 1;
     ctx.strokeStyle = "#e1f5fe";
@@ -1512,7 +1617,7 @@
     ctx.beginPath();
     ctx.moveTo(-s * 0.04, -s * 0.2);
     ctx.lineTo(-s * 0.02, s * 0.1);
-    ctx.strokeStyle = "rgba(255,255,255,0.55)";
+    ctx.strokeStyle = "rgba(255,255,255,0.6)";
     ctx.lineWidth = 1.5;
     ctx.stroke();
     ctx.rotate(t.angle);
@@ -1532,7 +1637,7 @@
       [-s * 0.24, -s * 0.08],
       [s * 0.2, s * 0.18],
     ];
-    ctx.strokeStyle = "rgba(225,245,254,0.7)";
+    ctx.strokeStyle = "rgba(225,245,254,0.75)";
     ctx.lineWidth = 1;
     for (const [fx, fy] of flakes) {
       const x = t.x + fx;
@@ -1558,14 +1663,16 @@
     const slowed = e.slowMul < 1;
     const flash = e.hitFlash && now < e.hitFlash;
 
+    drawGroundShadow(e.x, e.y, rad * 0.95, rad * 0.8);
+
     if (slowed) {
       ctx.beginPath();
-      ctx.arc(e.x, e.y, rad + 5, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(129,212,250,0.3)";
+      ctx.arc(e.x, e.y, rad + 6, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(129,212,250,0.22)";
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(e.x, e.y, rad + 2, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(179,229,252,0.55)";
+      ctx.arc(e.x, e.y, rad + 3, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(179,229,252,0.65)";
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }
@@ -1591,13 +1698,13 @@
     ctx.ellipse(0, rad * 0.08, rad * 0.95, rad * 0.78, 0, 0, Math.PI * 2);
     ctx.fillStyle = fill;
     ctx.fill();
-    ctx.strokeStyle = e.colorDark || "rgba(0,0,0,0.35)";
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = e.colorDark || "rgba(0,0,0,0.4)";
+    ctx.lineWidth = 1.6;
     ctx.stroke();
     if (!flash) {
       ctx.beginPath();
       ctx.ellipse(-rad * 0.25, -rad * 0.15, rad * 0.35, rad * 0.22, -0.4, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(255,255,255,0.28)";
+      ctx.fillStyle = "rgba(255,255,255,0.3)";
       ctx.fill();
     }
     ctx.strokeStyle = fill;
@@ -1628,12 +1735,19 @@
   function drawEnemyFast(e, rad, flash, slow) {
     const fill = bodyFill(e.color, flash, slow, e.kind);
     if (!flash) {
-      ctx.globalAlpha = 0.25;
+      ctx.globalAlpha = 0.28;
       ctx.fillStyle = fill;
       ctx.beginPath();
-      ctx.moveTo(-rad * 1.4, 0);
-      ctx.lineTo(-rad * 0.4, -rad * 0.35);
-      ctx.lineTo(-rad * 0.4, rad * 0.35);
+      ctx.moveTo(-rad * 1.55, 0);
+      ctx.lineTo(-rad * 0.35, -rad * 0.4);
+      ctx.lineTo(-rad * 0.35, rad * 0.4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 0.15;
+      ctx.beginPath();
+      ctx.moveTo(-rad * 1.9, 0);
+      ctx.lineTo(-rad * 0.7, -rad * 0.28);
+      ctx.lineTo(-rad * 0.7, rad * 0.28);
       ctx.closePath();
       ctx.fill();
       ctx.globalAlpha = 1;
@@ -1646,7 +1760,7 @@
     ctx.closePath();
     ctx.fillStyle = fill;
     ctx.fill();
-    ctx.strokeStyle = e.colorDark || "rgba(0,0,0,0.35)";
+    ctx.strokeStyle = e.colorDark || "rgba(0,0,0,0.4)";
     ctx.lineWidth = 1.5;
     ctx.stroke();
     ctx.beginPath();
@@ -1678,7 +1792,7 @@
     ctx.fillStyle = fill;
     ctx.fill();
     ctx.strokeStyle = dark;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.2;
     ctx.stroke();
     roundRectPath(-rad * 1.05, -rad * 0.55, rad * 0.35, rad * 1.1, 3);
     roundRectPath(rad * 0.7, -rad * 0.55, rad * 0.35, rad * 1.1, 3);
@@ -1703,13 +1817,17 @@
     const fill = bodyFill(e.color, flash, slow, e.kind);
     const pulse = 1 + Math.sin(now * 3) * 0.06;
     ctx.beginPath();
+    ctx.arc(0, 0, rad * 1.35 * pulse, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(186,104,200,0.12)";
+    ctx.fill();
+    ctx.beginPath();
     ctx.arc(0, 0, rad * 1.25 * pulse, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(225,190,231,0.45)";
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(225,190,231,0.5)";
+    ctx.lineWidth = 2.5;
     ctx.stroke();
     ctx.beginPath();
     ctx.arc(0, 0, rad * 1.1, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(186,104,200,0.5)";
+    ctx.strokeStyle = "rgba(186,104,200,0.55)";
     ctx.lineWidth = 1.5;
     ctx.stroke();
     ctx.beginPath();
@@ -1767,10 +1885,8 @@
     ctx.strokeStyle = e.colorDark || "#455a64";
     ctx.lineWidth = 1.5;
     ctx.stroke();
-    // 盔饰
     ctx.fillStyle = flash ? "#fff" : "#37474f";
     ctx.fillRect(-rad * 0.4, -rad * 0.85, rad * 0.8, rad * 0.28);
-    // 前方厚盾（分层）
     ctx.fillStyle = flash ? "#eceff1" : "#607d8b";
     ctx.beginPath();
     ctx.moveTo(rad * 0.3, -rad * 0.9);
@@ -1791,34 +1907,32 @@
     ctx.moveTo(rad * 0.55, 0);
     ctx.lineTo(rad * 1.05, 0);
     ctx.stroke();
-    // 盾徽
     ctx.beginPath();
     ctx.arc(rad * 0.8, 0, rad * 0.18, 0, Math.PI * 2);
     ctx.fillStyle = flash ? "#fff" : "#ffd54f";
     ctx.fill();
+    ctx.strokeStyle = "#f9a825";
+    ctx.lineWidth = 1;
+    ctx.stroke();
   }
 
   function drawEnemyFlyer(e, rad, flash, slow) {
     const fill = bodyFill(e.color, flash, slow, e.kind);
-    ctx.globalAlpha = 0.88;
-    // 翼
+    ctx.globalAlpha = 0.9;
     ctx.fillStyle = fill;
     ctx.beginPath();
     ctx.ellipse(0, 0, rad * 1.35, rad * 0.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    // 翼骨
     ctx.strokeStyle = e.colorDark || "#00838f";
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(-rad * 1.2, 0);
     ctx.lineTo(rad * 0.9, 0);
     ctx.stroke();
-    // 身体
     ctx.fillStyle = flash ? "#fff" : (e.colorDark || "#00838f");
     ctx.beginPath();
     ctx.ellipse(rad * 0.2, 0, rad * 0.55, rad * 0.32, 0, 0, Math.PI * 2);
     ctx.fill();
-    // 头
     ctx.beginPath();
     ctx.arc(rad * 0.7, 0, rad * 0.22, 0, Math.PI * 2);
     ctx.fillStyle = fill;
@@ -1834,8 +1948,8 @@
     ctx.arc(-rad * 0.3, rad * 0.35, 1.5, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
-    ctx.strokeStyle = "rgba(128,222,234,0.55)";
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(128,222,234,0.6)";
+    ctx.lineWidth = 1.2;
     ctx.beginPath();
     ctx.ellipse(0, 0, rad * 1.4, rad * 0.55, 0, 0, Math.PI * 2);
     ctx.stroke();
@@ -1855,7 +1969,7 @@
       roundRectPath(bx, by, bw * ratio, bh, 1.5);
       ctx.fillStyle = col;
       ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,0.25)";
+      ctx.fillStyle = "rgba(255,255,255,0.28)";
       ctx.fillRect(bx + 1, by + 1, Math.max(0, bw * ratio - 2), 1.5);
     }
     if (e.kind === "boss") {
