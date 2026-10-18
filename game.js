@@ -276,7 +276,12 @@
     spawnTimer: 0,
     hoverCell: null,
     ended: false,
+    speed: 1, // 1–4；刷新/重开回 1x
+    waveWallStart: null, // 本波首怪出现的 performance.now()（墙钟）
   };
+
+  /** 模拟时钟（秒），随倍速推进；慢速/闪白/弹道寿命用它，避免墙钟与倍速错位 */
+  let gameNow = 0;
 
   // ---------- 工具 ----------
   function toast(msg, ms = 1600) {
@@ -583,6 +588,7 @@
     state.spawnQueue = queueWave(n);
     state.spawnTimer = 0.15;
     state.phase = "spawning";
+    state.waveWallStart = null; // 首怪真正出现时再记墙钟
     state.buildType = null;
     updateBuildButtons();
     updateHUD();
@@ -622,6 +628,24 @@
     startWave(n);
   }
 
+  /** 速清奖励：墙钟秒结算，不受倍速影响（避免 4x 刷奖励） */
+  function awardSpeedClearBonus() {
+    if (state.waveWallStart == null) return 0;
+    const Tclear = (performance.now() - state.waveWallStart) / 1000;
+    state.waveWallStart = null;
+    const w = state.wave;
+    const Tbase = 16 + 2.5 * w;
+    const gold = Math.max(
+      0,
+      Math.min(36, Math.round((12 * Tbase) / Math.max(Tclear, 0.5)))
+    );
+    if (gold > 0) {
+      state.gold += gold;
+      toast(`速清 +${gold}`, 1800);
+    }
+    return gold;
+  }
+
   function checkWaveClear() {
     if (state.phase !== "spawning" && state.phase !== "fighting") return;
     if (state.spawnQueue.length > 0) return;
@@ -629,6 +653,8 @@
       state.phase = "fighting";
       return;
     }
+    // 本波全部清完（击杀或漏光）→ 速清奖励；与「提前下一波」并存
+    awardSpeedClearBonus();
     if (state.wave >= TOTAL_WAVES) {
       winGame();
       return;
@@ -689,13 +715,17 @@
       spawnTimer: 0,
       hoverCell: null,
       ended: false,
+      speed: 1,
+      waveWallStart: null,
     });
+    gameNow = 0;
     overlay.classList.add("hidden");
     selectPanel.classList.add("hidden");
     buildPanel.classList.remove("hidden");
     btnNextWave.disabled = false;
     btnNextWave.classList.remove("waiting");
     btnNextWave.textContent = "开始第 1 波";
+    syncSpeedButtons();
     updateBuildButtons();
     updateHUD();
     toast("新的防线已就位");
@@ -715,6 +745,20 @@
     elStatus.textContent = status;
     updateBuildButtons();
     if (state.selected) refreshSelectPanel();
+  }
+
+  function syncSpeedButtons() {
+    const btns = document.querySelectorAll(".speed-btn");
+    btns.forEach((b) => {
+      const s = Number(b.dataset.speed);
+      b.classList.toggle("active", s === state.speed);
+    });
+  }
+
+  function setGameSpeed(mult) {
+    const s = Math.max(1, Math.min(4, Math.round(Number(mult) || 1)));
+    state.speed = s;
+    syncSpeedButtons();
   }
 
   function updateBuildButtons() {
@@ -891,6 +935,13 @@
 
   btnRestart.addEventListener("click", resetGame);
 
+  document.getElementById("speed-btns").addEventListener("click", (ev) => {
+    const btn = ev.target.closest(".speed-btn");
+    if (!btn) return;
+    setGameSpeed(btn.dataset.speed);
+  });
+  syncSpeedButtons();
+
   // ---------- 战斗逻辑 ----------
   function findTarget(tower) {
     const rangePx = tower.range * cellSize;
@@ -970,6 +1021,9 @@
         state.spawnTimer -= dt;
         if (state.spawnTimer <= 0) {
           const spec = state.spawnQueue.shift();
+          if (state.waveWallStart == null) {
+            state.waveWallStart = performance.now();
+          }
           state.enemies.push(
             new Enemy(spec.kind, spec.speedMul, spec.hpMul, spec.reward)
           );
@@ -1654,7 +1708,7 @@
 
   function drawEnemy(e) {
     const rad = e.radius * cellSize;
-    const now = performance.now() / 1000;
+    const now = gameNow; // 与受击闪白/减速同一模拟时钟
     const slowed = e.slowMul < 1;
     const flash = e.hitFlash && now < e.hitFlash;
 
@@ -1984,11 +2038,13 @@
   // ---------- 主循环 ----------
   let last = performance.now() / 1000;
   function frame(ts) {
-    const now = ts / 1000;
-    let dt = now - last;
-    last = now;
+    const wallNow = ts / 1000;
+    let dt = wallNow - last;
+    last = wallNow;
     if (dt > 0.05) dt = 0.05;
-    update(dt, now);
+    const simDt = dt * (state.speed || 1);
+    gameNow += simDt;
+    update(simDt, gameNow);
     draw();
     requestAnimationFrame(frame);
   }
@@ -2014,5 +2070,7 @@
     wavePlan,
     TOTAL_WAVES,
     restBeforeWave,
+    setGameSpeed,
+    awardSpeedClearBonus,
   };
 })();

@@ -35,3 +35,8 @@
 
 ## 部署
 `https://dannywang0822.github.io/tower-defense/?v=8`
+
+
+## 倍速与速清（v10）
+- HUD「速度」：1×/2×/3×/4×；默认 1×，重开回 1×。模拟（移动/冷却/刷怪/波间倒计时）跟倍率；氛围脉冲可仍跟墙钟。
+- 速清奖励（墙钟秒，不受倍速影响）：Tclear=首怪出现→本波清零；Tbase=16+2.5*w；gold=clamp(round(12*Tbase/max(Tclear,0.5)),0,36)；toast「速清 +N」。与提前下一波金币并存。
