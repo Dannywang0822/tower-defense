@@ -25,9 +25,9 @@
       range: 2.5,
       rate: 1.5,
       damage: 12,
-      color: "#66bb6a",
-      colorDark: "#2e7d32",
-      colorLight: "#a5d6a7",
+      color: "#9ccc65",
+      colorDark: "#558b2f",
+      colorLight: "#dcedc8",
       projectile: "arrow",
     },
     cannon: {
@@ -38,8 +38,8 @@
       damage: 35,
       splash: 1.2,
       splashRatio: 0.5,
-      color: "#ef8354",
-      colorDark: "#c45c2a",
+      color: "#e8985a",
+      colorDark: "#a85a2a",
       colorLight: "#ffccbc",
       projectile: "cannon",
     },
@@ -51,9 +51,9 @@
       damage: 8,
       slow: 0.35,
       slowDur: 1.5,
-      color: "#4fc3f7",
+      color: "#81d4fa",
       colorDark: "#0277bd",
-      colorLight: "#b3e5fc",
+      colorLight: "#e1f5fe",
       projectile: "frost",
     },
   };
@@ -461,28 +461,28 @@
 
       if (kind === "fast") {
         this.radius = 0.26;
-        this.color = "#ffeb3b";
-        this.colorDark = "#f9a825";
+        this.color = "#c5e1a5";
+        this.colorDark = "#558b2f";
       } else if (kind === "tank") {
         this.radius = 0.44;
-        this.color = "#8d6e63";
-        this.colorDark = "#5d4037";
+        this.color = "#8d9e6f";
+        this.colorDark = "#4a5a32";
       } else if (kind === "boss") {
         this.radius = 0.52;
-        this.color = "#ce93d8";
-        this.colorDark = "#7b1fa2";
+        this.color = "#9e9d6b";
+        this.colorDark = "#4a4728";
       } else if (kind === "shield") {
         this.radius = 0.38;
-        this.color = "#90a4ae";
-        this.colorDark = "#455a64";
+        this.color = "#7a8a62";
+        this.colorDark = "#3e4634";
       } else if (kind === "flyer") {
         this.radius = 0.24;
-        this.color = "#80deea";
-        this.colorDark = "#00838f";
+        this.color = "#b0bf88";
+        this.colorDark = "#5a6b3a";
       } else {
         this.radius = 0.32;
-        this.color = "#ef5350";
-        this.colorDark = "#c62828";
+        this.color = "#7cb342";
+        this.colorDark = "#33691e";
       }
       const p = posOnPath(0);
       this.x = p.x;
@@ -1067,11 +1067,11 @@
     const now = performance.now() / 1000;
     ctx.clearRect(0, 0, w, h);
 
-    // 氛围底：微弱纵向渐变
+    // 城堡夜景底：暖石色天幕
     const sky = ctx.createLinearGradient(0, 0, 0, h);
-    sky.addColorStop(0, "#0e1824");
-    sky.addColorStop(0.55, "#0c141c");
-    sky.addColorStop(1, "#0a1210");
+    sky.addColorStop(0, "#1e1a14");
+    sky.addColorStop(0.5, "#16120e");
+    sky.addColorStop(1, "#10140e");
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, w, h);
 
@@ -1080,55 +1080,60 @@
         const x = c * cellSize;
         const y = r * cellSize;
         if (isPath(c, r)) {
-          ctx.fillStyle = "#15202c";
+          ctx.fillStyle = "#1a2218";
           ctx.fillRect(x, y, cellSize, cellSize);
         } else {
           const even = (c + r) % 2 === 0;
-          ctx.fillStyle = even ? "#14301c" : "#183624";
+          ctx.fillStyle = even ? "#2a2418" : "#322a1c";
           ctx.fillRect(x, y, cellSize, cellSize);
-          // 草地微点 + 偶发光斑
+          // 石砖缝 + 偶发苔点
           const seed = (c * 17 + r * 31) & 15;
-          if (seed < 4) {
-            ctx.fillStyle = "rgba(100,180,110,0.14)";
-            ctx.fillRect(x + cellSize * 0.22, y + cellSize * 0.38, 1.8, 1.8);
-            ctx.fillRect(x + cellSize * 0.62, y + cellSize * 0.68, 1.6, 1.6);
-          } else if (seed === 5) {
-            ctx.fillStyle = "rgba(180,220,120,0.1)";
+          if (seed < 3) {
+            ctx.fillStyle = "rgba(90,70,45,0.35)";
+            ctx.fillRect(x + 2, y + cellSize * 0.48, cellSize - 4, 1);
+          }
+          if (seed === 4 || seed === 9) {
+            ctx.fillStyle = "rgba(120,150,80,0.16)";
             ctx.beginPath();
-            ctx.arc(x + cellSize * 0.5, y + cellSize * 0.45, 1.2, 0, Math.PI * 2);
+            ctx.arc(x + cellSize * 0.35, y + cellSize * 0.4, 1.4, 0, Math.PI * 2);
             ctx.fill();
+          }
+          // 城垛感边缘碎石
+          if (seed === 7) {
+            ctx.fillStyle = "rgba(180,150,90,0.12)";
+            ctx.fillRect(x + cellSize * 0.55, y + cellSize * 0.2, 3, 2.5);
           }
         }
       }
     }
 
     if (pathPoints.length > 1) {
-      // 路径外发光
+      // 护城河/泥路外晕（尸潮走道）
       ctx.beginPath();
       ctx.moveTo(pathPoints[0].x, pathPoints[0].y);
       for (let i = 1; i < pathPoints.length; i++) {
         ctx.lineTo(pathPoints[i].x, pathPoints[i].y);
       }
-      ctx.strokeStyle = "rgba(79,195,247,0.12)";
-      ctx.lineWidth = cellSize * 0.85;
+      ctx.strokeStyle = "rgba(90,120,60,0.16)";
+      ctx.lineWidth = cellSize * 0.9;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.stroke();
       // 石板外缘
-      ctx.strokeStyle = "#243848";
+      ctx.strokeStyle = "#3a3428";
       ctx.lineWidth = cellSize * 0.64;
       ctx.stroke();
-      // 内道
-      ctx.strokeStyle = "#3a556e";
+      // 泥石内道
+      ctx.strokeStyle = "#4a5540";
       ctx.lineWidth = cellSize * 0.4;
       ctx.stroke();
-      // 中心高光带
-      ctx.strokeStyle = "rgba(160,200,230,0.22)";
+      // 中心湿痕
+      ctx.strokeStyle = "rgba(140,160,100,0.2)";
       ctx.lineWidth = cellSize * 0.12;
       ctx.stroke();
-      // 虚线行进指引
-      ctx.setLineDash([4, 8]);
-      ctx.strokeStyle = "rgba(79,195,247,0.38)";
+      // 尸潮脚印虚线
+      ctx.setLineDash([3, 9]);
+      ctx.strokeStyle = "rgba(160,180,90,0.32)";
       ctx.lineWidth = 1.5;
       ctx.stroke();
       ctx.setLineDash([]);
@@ -1136,8 +1141,8 @@
 
     const entry = pathPoints[0];
     const exit = pathPoints[pathPoints.length - 1];
-    drawGate(entry.x, entry.y, "#66bb6a", "入", now);
-    drawGate(exit.x, exit.y, "#ef5350", "出", now);
+    drawZombieSpawn(entry.x, entry.y, now);
+    drawCastleGate(exit.x, exit.y, now);
 
     // 放置预览
     if (state.buildType && state.hoverCell) {
@@ -1146,16 +1151,16 @@
         const ok = canPlace(c, r);
         const p = cellCenter(c, r);
         const def = TOWER_DEFS[state.buildType];
-        ctx.fillStyle = ok ? "rgba(79,195,247,0.22)" : "rgba(239,83,80,0.28)";
+        ctx.fillStyle = ok ? "rgba(212,175,85,0.22)" : "rgba(229,115,115,0.28)";
         ctx.fillRect(c * cellSize + 2, r * cellSize + 2, cellSize - 4, cellSize - 4);
-        ctx.strokeStyle = ok ? "rgba(79,195,247,0.9)" : "rgba(239,83,80,0.9)";
+        ctx.strokeStyle = ok ? "rgba(212,175,85,0.9)" : "rgba(229,115,115,0.9)";
         ctx.lineWidth = 2;
         ctx.strokeRect(c * cellSize + 2, r * cellSize + 2, cellSize - 4, cellSize - 4);
         ctx.beginPath();
         ctx.arc(p.x, p.y, def.range * cellSize, 0, Math.PI * 2);
-        ctx.fillStyle = ok ? "rgba(79,195,247,0.07)" : "rgba(239,83,80,0.07)";
+        ctx.fillStyle = ok ? "rgba(212,175,85,0.07)" : "rgba(229,115,115,0.07)";
         ctx.fill();
-        ctx.strokeStyle = ok ? "rgba(79,195,247,0.5)" : "rgba(239,83,80,0.5)";
+        ctx.strokeStyle = ok ? "rgba(212,175,85,0.5)" : "rgba(229,115,115,0.5)";
         ctx.lineWidth = 1.5;
         ctx.setLineDash([5, 5]);
         ctx.stroke();
@@ -1168,7 +1173,7 @@
       const pulse = 0.35 + Math.sin(now * 3.2) * 0.08;
       ctx.beginPath();
       ctx.arc(t.x, t.y, t.range * cellSize, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(255,213,79,${pulse * 0.22})`;
+      ctx.fillStyle = `rgba(212,175,85,${pulse * 0.22})`;
       ctx.fill();
       ctx.strokeStyle = `rgba(255,213,79,${0.45 + pulse})`;
       ctx.lineWidth = 1.5;
@@ -1182,7 +1187,7 @@
       ctx.stroke();
       ctx.beginPath();
       ctx.arc(t.x, t.y, cellSize * 0.48, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(255,213,79,0.25)";
+      ctx.strokeStyle = "rgba(212,175,85,0.25)";
       ctx.lineWidth = 4;
       ctx.stroke();
     }
@@ -1238,18 +1243,17 @@
     // 轻 vignette
     const vig = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.max(w, h) * 0.72);
     vig.addColorStop(0, "rgba(0,0,0,0)");
-    vig.addColorStop(1, "rgba(0,0,0,0.28)");
+    vig.addColorStop(1, "rgba(0,0,0,0.32)");
     ctx.fillStyle = vig;
     ctx.fillRect(0, 0, w, h);
 
-    ctx.fillStyle = "rgba(200,220,240,0.08)";
+    ctx.fillStyle = "rgba(212,175,85,0.14)";
     ctx.font = `600 ${Math.max(11, cellSize * 0.32)}px ${getComputedStyle(document.body).fontFamily}`;
     ctx.textAlign = "center";
-    ctx.fillText("路卫 Coinpath", w / 2, cellSize * 0.42);
+    ctx.fillText("路卫 · 城堡防线", w / 2, cellSize * 0.42);
   }
 
   function drawProjectile(p) {
-    // 短拖尾
     const speed = Math.hypot(p.vx, p.vy) || 1;
     const tx = (p.vx / speed) * 8;
     const ty = (p.vy / speed) * 8;
@@ -1315,7 +1319,7 @@
       ctx.lineTo(2, 2.8);
       ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = "#43a047";
+      ctx.fillStyle = "#558b2f";
       ctx.beginPath();
       ctx.moveTo(-7, 0);
       ctx.lineTo(-10, -2.5);
@@ -1327,41 +1331,100 @@
     }
   }
 
-  function drawGate(x, y, color, label, now) {
-    const r = cellSize * 0.32;
-    const pulse = 0.3 + Math.sin((now || 0) * 2.4 + (label === "入" ? 0 : 1.5)) * 0.12;
+  /** 入口：僵尸裂隙 */
+  function drawZombieSpawn(x, y, now) {
+    const r = cellSize * 0.34;
+    const pulse = 0.35 + Math.sin(now * 2.6) * 0.12;
     ctx.beginPath();
-    ctx.arc(x, y, r + 6, 0, Math.PI * 2);
-    ctx.strokeStyle = color;
-    ctx.globalAlpha = pulse;
+    ctx.arc(x, y, r + 8, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(140,180,70,${pulse})`;
     ctx.lineWidth = 4;
     ctx.stroke();
-    ctx.globalAlpha = 1;
+    // 不规则裂口
     ctx.beginPath();
-    ctx.arc(x, y, r + 2, 0, Math.PI * 2);
-    ctx.strokeStyle = color;
-    ctx.globalAlpha = 0.45;
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = "#121a24";
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2 + now * 0.2;
+      const rr = r * (0.85 + (i % 2) * 0.18);
+      const px = x + Math.cos(a) * rr;
+      const py = y + Math.sin(a) * rr;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = "#1a2014";
     ctx.fill();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = "#8bc34a";
+    ctx.lineWidth = 2;
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(x, y, r * 0.62, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.globalAlpha = 0.92;
+    ctx.arc(x, y, r * 0.45, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(124,179,66,${0.55 + pulse * 0.3})`;
     ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = "#0a1018";
-    ctx.font = `700 ${Math.max(10, cellSize * 0.26)}px sans-serif`;
+    ctx.fillStyle = "#0a1008";
+    ctx.font = `700 ${Math.max(9, cellSize * 0.22)}px sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(label, x, y + 0.5);
+    ctx.fillText("尸", x, y + 0.5);
+  }
+
+  /** 出口：城堡门 */
+  function drawCastleGate(x, y, now) {
+    const s = cellSize;
+    const pulse = 0.3 + Math.sin(now * 2.2 + 1.2) * 0.1;
+    // 暖金光环
+    ctx.beginPath();
+    ctx.arc(x, y, s * 0.42, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(212,175,85,${pulse})`;
+    ctx.lineWidth = 3.5;
+    ctx.stroke();
+    // 石门主体
+    const bw = s * 0.55;
+    const bh = s * 0.62;
+    roundRectPath(x - bw / 2, y - bh / 2, bw, bh, 3);
+    ctx.fillStyle = "#5a4a36";
+    ctx.fill();
+    ctx.strokeStyle = "#3e3428";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // 城垛顶
+    const teeth = 4;
+    const tw = bw / teeth;
+    for (let i = 0; i < teeth; i++) {
+      if (i % 2 === 1) continue;
+      ctx.fillStyle = "#6d5c45";
+      ctx.fillRect(x - bw / 2 + i * tw, y - bh / 2 - s * 0.1, tw * 0.9, s * 0.12);
+    }
+    // 拱门洞
+    ctx.beginPath();
+    ctx.moveTo(x - bw * 0.22, y + bh * 0.35);
+    ctx.lineTo(x - bw * 0.22, y - bh * 0.05);
+    ctx.quadraticCurveTo(x, y - bh * 0.38, x + bw * 0.22, y - bh * 0.05);
+    ctx.lineTo(x + bw * 0.22, y + bh * 0.35);
+    ctx.closePath();
+    ctx.fillStyle = "#1a120c";
+    ctx.fill();
+    ctx.strokeStyle = "#d4af55";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // 小旗
+    ctx.strokeStyle = "#8d6e63";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x + bw * 0.38, y - bh * 0.45);
+    ctx.lineTo(x + bw * 0.38, y - bh * 0.75);
+    ctx.stroke();
+    ctx.fillStyle = "#c62828";
+    ctx.beginPath();
+    ctx.moveTo(x + bw * 0.38, y - bh * 0.75);
+    ctx.lineTo(x + bw * 0.58, y - bh * 0.65);
+    ctx.lineTo(x + bw * 0.38, y - bh * 0.55);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#ffecb3";
+    ctx.font = `700 ${Math.max(9, s * 0.2)}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("门", x, y + bh * 0.12);
   }
 
   function roundRectPath(x, y, w, h, r) {
@@ -1378,8 +1441,17 @@
   function drawGroundShadow(x, y, rx, ry) {
     ctx.beginPath();
     ctx.ellipse(x, y + ry * 0.85, rx, ry * 0.35, 0, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(0,0,0,0.28)";
+    ctx.fillStyle = "rgba(0,0,0,0.32)";
     ctx.fill();
+  }
+
+  function drawBattlements(cx, cy, w, h, n) {
+    const tw = w / n;
+    for (let i = 0; i < n; i++) {
+      if (i % 2 === 1) continue;
+      ctx.fillStyle = "#7a6a52";
+      ctx.fillRect(cx - w / 2 + i * tw + 1, cy - h / 2 - h * 0.22, tw - 2, h * 0.24);
+    }
   }
 
   function drawTowerLevelMarks(t, s) {
@@ -1387,38 +1459,21 @@
     const n = t.level - 1;
     for (let i = 0; i < n; i++) {
       const ox = (i - (n - 1) / 2) * s * 0.14;
-      const gy = t.y - s * 0.42;
-      if (t.type === "arrow") {
-        ctx.fillStyle = "#ffd54f";
-        ctx.fillRect(t.x + ox - 1, gy - s * 0.12, 2, s * 0.16);
-        ctx.beginPath();
-        ctx.moveTo(t.x + ox + 1, gy - s * 0.12);
-        ctx.lineTo(t.x + ox + s * 0.1, gy - s * 0.06);
-        ctx.lineTo(t.x + ox + 1, gy);
-        ctx.closePath();
-        ctx.fillStyle = "#66bb6a";
-        ctx.fill();
-      } else if (t.type === "cannon") {
-        ctx.beginPath();
-        ctx.arc(t.x + ox, gy, s * 0.055, 0, Math.PI * 2);
-        ctx.fillStyle = "#ffd54f";
-        ctx.fill();
-        ctx.strokeStyle = "#ff8a65";
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      } else {
-        ctx.beginPath();
-        ctx.moveTo(t.x + ox, gy - s * 0.07);
-        ctx.lineTo(t.x + ox + s * 0.05, gy);
-        ctx.lineTo(t.x + ox, gy + s * 0.07);
-        ctx.lineTo(t.x + ox - s * 0.05, gy);
-        ctx.closePath();
-        ctx.fillStyle = "#e1f5fe";
-        ctx.fill();
-        ctx.strokeStyle = "#4fc3f7";
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
+      const gy = t.y - s * 0.48;
+      // 金旗标记
+      ctx.strokeStyle = "#8d6e63";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(t.x + ox, gy);
+      ctx.lineTo(t.x + ox, gy - s * 0.14);
+      ctx.stroke();
+      ctx.fillStyle = t.type === "frost" ? "#81d4fa" : t.type === "cannon" ? "#e8985a" : "#ffd54f";
+      ctx.beginPath();
+      ctx.moveTo(t.x + ox, gy - s * 0.14);
+      ctx.lineTo(t.x + ox + s * 0.1, gy - s * 0.1);
+      ctx.lineTo(t.x + ox, gy - s * 0.06);
+      ctx.closePath();
+      ctx.fill();
     }
   }
 
@@ -1431,53 +1486,53 @@
     drawTowerLevelMarks(t, s);
   }
 
+  /** 箭塔：石质箭楼 + 城垛 + 旗帜 */
   function drawArrowTower(t, s) {
-    const br = s * 0.3;
-    // 底座外环光
-    ctx.beginPath();
-    ctx.arc(t.x, t.y, br + 2, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(102,187,106,0.25)";
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    ctx.beginPath();
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2 - Math.PI / 8;
-      const px = t.x + Math.cos(a) * br;
-      const py = t.y + Math.sin(a) * br;
-      if (i === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
-    }
-    ctx.closePath();
-    ctx.fillStyle = "#5d4037";
+    const bw = s * 0.52;
+    const bh = s * 0.48;
+    // 石基
+    roundRectPath(t.x - bw / 2, t.y - bh / 2, bw, bh, 3);
+    ctx.fillStyle = "#6d5c45";
     ctx.fill();
-    ctx.strokeStyle = "#3e2723";
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "#3e3428";
+    ctx.lineWidth = 1.8;
     ctx.stroke();
-    // 木质台面高光
-    ctx.beginPath();
-    ctx.arc(t.x, t.y, s * 0.2, 0, Math.PI * 2);
-    ctx.fillStyle = "#8d6e63";
-    ctx.fill();
-    ctx.strokeStyle = "#6d4c41";
+    // 砖缝
+    ctx.strokeStyle = "rgba(40,32,24,0.35)";
     ctx.lineWidth = 1;
-    ctx.stroke();
     ctx.beginPath();
-    ctx.arc(t.x - s * 0.06, t.y - s * 0.06, s * 0.08, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctx.moveTo(t.x - bw / 2 + 3, t.y);
+    ctx.lineTo(t.x + bw / 2 - 3, t.y);
+    ctx.stroke();
+    drawBattlements(t.x, t.y - bh * 0.05, bw * 0.95, bh * 0.7, 4);
+    // 绿旗
+    ctx.strokeStyle = "#5d4037";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(t.x + bw * 0.28, t.y - bh * 0.55);
+    ctx.lineTo(t.x + bw * 0.28, t.y - bh * 0.95);
+    ctx.stroke();
+    ctx.fillStyle = t.color || "#9ccc65";
+    ctx.beginPath();
+    ctx.moveTo(t.x + bw * 0.28, t.y - bh * 0.95);
+    ctx.lineTo(t.x + bw * 0.52, t.y - bh * 0.82);
+    ctx.lineTo(t.x + bw * 0.28, t.y - bh * 0.7);
+    ctx.closePath();
     ctx.fill();
+    // 旋转箭台
     ctx.save();
     ctx.translate(t.x, t.y);
     ctx.rotate(t.angle);
     ctx.beginPath();
     ctx.arc(0, 0, s * 0.12, 0, Math.PI * 2);
-    ctx.fillStyle = t.colorLight || "#a5d6a7";
+    ctx.fillStyle = "#8a7660";
     ctx.fill();
-    ctx.strokeStyle = t.colorDark || "#2e7d32";
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "#3e3428";
+    ctx.lineWidth = 1.2;
     ctx.stroke();
-    ctx.strokeStyle = "#c8e6c9";
-    ctx.lineWidth = 2.5;
-    ctx.shadowColor = "rgba(102,187,106,0.45)";
+    ctx.strokeStyle = "#dcedc8";
+    ctx.lineWidth = 2.4;
+    ctx.shadowColor = "rgba(156,204,101,0.4)";
     ctx.shadowBlur = 4;
     ctx.beginPath();
     ctx.moveTo(s * 0.02, 0);
@@ -1491,66 +1546,40 @@
     ctx.lineTo(s * 0.28, s * 0.06);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = t.color || "#66bb6a";
-    ctx.beginPath();
-    ctx.moveTo(s * 0.04, 0);
-    ctx.lineTo(-s * 0.04, -s * 0.07);
-    ctx.lineTo(s * 0.02, 0);
-    ctx.lineTo(-s * 0.04, s * 0.07);
-    ctx.closePath();
-    ctx.fill();
     ctx.restore();
   }
 
+  /** 炮塔：石堡炮台 */
   function drawCannonTower(t, s) {
-    const hw = s * 0.28;
-    const hh = s * 0.26;
-    ctx.beginPath();
-    ctx.arc(t.x, t.y, Math.max(hw, hh) + 3, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(239,131,84,0.22)";
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    roundRectPath(t.x - hw, t.y - hh, hw * 2, hh * 2, 4);
-    ctx.fillStyle = "#4e342e";
+    const bw = s * 0.56;
+    const bh = s * 0.5;
+    roundRectPath(t.x - bw / 2, t.y - bh / 2, bw, bh, 4);
+    ctx.fillStyle = "#5a4a36";
     ctx.fill();
-    ctx.strokeStyle = "#3e2723";
+    ctx.strokeStyle = "#2e281e";
     ctx.lineWidth = 2;
     ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(t.x, t.y, s * 0.2, 0, Math.PI * 2);
-    ctx.fillStyle = "#795548";
-    ctx.fill();
-    ctx.strokeStyle = t.color || "#ef8354";
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    const rivets = [
-      [-s * 0.2, -s * 0.18],
-      [s * 0.2, -s * 0.18],
-      [-s * 0.2, s * 0.18],
-      [s * 0.2, s * 0.18],
-    ];
-    for (const [rx, ry] of rivets) {
+    drawBattlements(t.x, t.y, bw * 0.9, bh * 0.75, 5);
+    // 铜钉
+    for (const [ox, oy] of [[-0.18, -0.14], [0.18, -0.14], [-0.18, 0.14], [0.18, 0.14]]) {
       ctx.beginPath();
-      ctx.arc(t.x + rx, t.y + ry, 2, 0, Math.PI * 2);
-      ctx.fillStyle = "#d7ccc8";
+      ctx.arc(t.x + ox * s, t.y + oy * s, 2, 0, Math.PI * 2);
+      ctx.fillStyle = "#d4af55";
       ctx.fill();
-      ctx.strokeStyle = "#5d4037";
-      ctx.lineWidth = 0.8;
-      ctx.stroke();
     }
     ctx.save();
     ctx.translate(t.x, t.y);
     ctx.rotate(t.angle);
     roundRectPath(s * 0.02, -s * 0.09, s * 0.3, s * 0.18, 2);
-    ctx.fillStyle = "#6d4c41";
+    ctx.fillStyle = "#4e4030";
     ctx.fill();
-    ctx.strokeStyle = "#3e2723";
+    ctx.strokeStyle = "#2a2218";
     ctx.lineWidth = 1;
     ctx.stroke();
     ctx.beginPath();
     ctx.arc(s * 0.32, 0, s * 0.1, 0, Math.PI * 2);
-    ctx.fillStyle = t.color || "#ef8354";
-    ctx.shadowColor = "rgba(239,131,84,0.5)";
+    ctx.fillStyle = t.color || "#e8985a";
+    ctx.shadowColor = "rgba(232,152,90,0.5)";
     ctx.shadowBlur = 5;
     ctx.fill();
     ctx.shadowBlur = 0;
@@ -1559,28 +1588,19 @@
     ctx.fillStyle = "#1a120c";
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(s * 0.28, -s * 0.04, 1.8, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255,236,179,0.75)";
-    ctx.fill();
-    ctx.beginPath();
     ctx.arc(0, 0, s * 0.1, 0, Math.PI * 2);
-    ctx.fillStyle = "#a1887f";
+    ctx.fillStyle = "#8a7660";
     ctx.fill();
-    ctx.strokeStyle = "#5d4037";
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
     ctx.restore();
   }
 
+  /** 霜塔：符文石塔 */
   function drawFrostTower(t, s) {
     ctx.beginPath();
-    ctx.arc(t.x, t.y, s * 0.4, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(79,195,247,0.12)";
+    ctx.arc(t.x, t.y, s * 0.38, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(129,212,250,0.1)";
     ctx.fill();
-    ctx.beginPath();
-    ctx.arc(t.x, t.y, s * 0.3, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(129,212,250,0.16)";
-    ctx.fill();
+    // 石六角底座
     ctx.beginPath();
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2 - Math.PI / 6;
@@ -1590,65 +1610,40 @@
       else ctx.lineTo(px, py);
     }
     ctx.closePath();
-    ctx.fillStyle = "#01579b";
+    ctx.fillStyle = "#5a5348";
     ctx.fill();
-    ctx.strokeStyle = t.color || "#4fc3f7";
+    ctx.strokeStyle = "#81d4fa";
     ctx.lineWidth = 1.5;
-    ctx.shadowColor = "rgba(79,195,247,0.45)";
-    ctx.shadowBlur = 6;
+    ctx.shadowColor = "rgba(129,212,250,0.4)";
+    ctx.shadowBlur = 5;
     ctx.stroke();
     ctx.shadowBlur = 0;
+    // 冰晶
     ctx.save();
     ctx.translate(t.x, t.y);
     ctx.beginPath();
-    ctx.moveTo(0, -s * 0.28);
-    ctx.lineTo(s * 0.12, -s * 0.04);
-    ctx.lineTo(s * 0.06, s * 0.16);
-    ctx.lineTo(-s * 0.06, s * 0.16);
-    ctx.lineTo(-s * 0.12, -s * 0.04);
+    ctx.moveTo(0, -s * 0.26);
+    ctx.lineTo(s * 0.1, -s * 0.02);
+    ctx.lineTo(s * 0.05, s * 0.14);
+    ctx.lineTo(-s * 0.05, s * 0.14);
+    ctx.lineTo(-s * 0.1, -s * 0.02);
     ctx.closePath();
-    ctx.fillStyle = t.color || "#4fc3f7";
+    ctx.fillStyle = t.color || "#81d4fa";
     ctx.globalAlpha = 0.88;
     ctx.fill();
     ctx.globalAlpha = 1;
     ctx.strokeStyle = "#e1f5fe";
     ctx.lineWidth = 1.2;
     ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(-s * 0.04, -s * 0.2);
-    ctx.lineTo(-s * 0.02, s * 0.1);
-    ctx.strokeStyle = "rgba(255,255,255,0.6)";
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
     ctx.rotate(t.angle);
     ctx.beginPath();
     ctx.moveTo(s * 0.08, 0);
-    ctx.lineTo(s * 0.3, -s * 0.05);
-    ctx.lineTo(s * 0.3, s * 0.05);
+    ctx.lineTo(s * 0.28, -s * 0.05);
+    ctx.lineTo(s * 0.28, s * 0.05);
     ctx.closePath();
-    ctx.fillStyle = t.colorLight || "#b3e5fc";
+    ctx.fillStyle = t.colorLight || "#e1f5fe";
     ctx.fill();
-    ctx.strokeStyle = t.colorDark || "#0277bd";
-    ctx.lineWidth = 1;
-    ctx.stroke();
     ctx.restore();
-    const flakes = [
-      [s * 0.22, -s * 0.2],
-      [-s * 0.24, -s * 0.08],
-      [s * 0.2, s * 0.18],
-    ];
-    ctx.strokeStyle = "rgba(225,245,254,0.75)";
-    ctx.lineWidth = 1;
-    for (const [fx, fy] of flakes) {
-      const x = t.x + fx;
-      const y = t.y + fy;
-      ctx.beginPath();
-      ctx.moveTo(x - 3, y);
-      ctx.lineTo(x + 3, y);
-      ctx.moveTo(x, y - 3);
-      ctx.lineTo(x, y + 3);
-      ctx.stroke();
-    }
   }
 
   function bodyFill(base, flash, slow, kind) {
@@ -1692,266 +1687,271 @@
     drawEnemyHpBar(e, rad);
   }
 
+  /** 普通尸：歪斜躯干 + 绿灰腐烂感 */
   function drawEnemyNormal(e, rad, flash, slow) {
     const fill = bodyFill(e.color, flash, slow, e.kind);
+    // 异形轮廓
     ctx.beginPath();
-    ctx.ellipse(0, rad * 0.08, rad * 0.95, rad * 0.78, 0, 0, Math.PI * 2);
+    ctx.moveTo(-rad * 0.7, rad * 0.55);
+    ctx.quadraticCurveTo(-rad * 1.05, 0, -rad * 0.55, -rad * 0.7);
+    ctx.quadraticCurveTo(0, -rad * 1.05, rad * 0.5, -rad * 0.65);
+    ctx.quadraticCurveTo(rad * 1.0, -0.05 * rad, rad * 0.65, rad * 0.55);
+    ctx.quadraticCurveTo(0, rad * 0.85, -rad * 0.7, rad * 0.55);
+    ctx.closePath();
     ctx.fillStyle = fill;
     ctx.fill();
-    ctx.strokeStyle = e.colorDark || "rgba(0,0,0,0.4)";
+    ctx.strokeStyle = e.colorDark || "#33691e";
     ctx.lineWidth = 1.6;
     ctx.stroke();
+    // 腐烂斑
     if (!flash) {
+      ctx.fillStyle = "rgba(60,80,30,0.35)";
       ctx.beginPath();
-      ctx.ellipse(-rad * 0.25, -rad * 0.15, rad * 0.35, rad * 0.22, -0.4, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(255,255,255,0.3)";
+      ctx.ellipse(-rad * 0.2, rad * 0.1, rad * 0.22, rad * 0.14, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(rad * 0.25, -rad * 0.15, rad * 0.15, rad * 0.1, -0.4, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.strokeStyle = fill;
-    ctx.lineWidth = 2;
+    // 空洞眼
+    ctx.fillStyle = flash ? "#333" : "#1a2010";
     ctx.beginPath();
-    ctx.moveTo(-rad * 0.25, -rad * 0.55);
-    ctx.quadraticCurveTo(-rad * 0.35, -rad * 1.05, -rad * 0.15, -rad * 1.05);
-    ctx.moveTo(rad * 0.25, -rad * 0.55);
-    ctx.quadraticCurveTo(rad * 0.35, -rad * 1.05, rad * 0.15, -rad * 1.05);
-    ctx.stroke();
-    ctx.fillStyle = fill;
-    ctx.beginPath();
-    ctx.arc(-rad * 0.15, -rad * 1.05, 2.2, 0, Math.PI * 2);
-    ctx.arc(rad * 0.15, -rad * 1.05, 2.2, 0, Math.PI * 2);
+    ctx.ellipse(-rad * 0.28, -rad * 0.2, rad * 0.16, rad * 0.2, -0.2, 0, Math.PI * 2);
+    ctx.ellipse(rad * 0.3, -rad * 0.18, rad * 0.14, rad * 0.18, 0.15, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = flash ? "#333" : "#1a120c";
+    ctx.fillStyle = "#c5e1a5";
     ctx.beginPath();
-    ctx.arc(-rad * 0.28, -rad * 0.05, rad * 0.18, 0, Math.PI * 2);
-    ctx.arc(rad * 0.28, -rad * 0.05, rad * 0.18, 0, Math.PI * 2);
+    ctx.arc(-rad * 0.22, -rad * 0.22, rad * 0.05, 0, Math.PI * 2);
+    ctx.arc(rad * 0.34, -rad * 0.2, rad * 0.045, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#fff";
+    // 张口
+    ctx.fillStyle = flash ? "#555" : "#2e1a1a";
     ctx.beginPath();
-    ctx.arc(-rad * 0.22, -rad * 0.1, rad * 0.07, 0, Math.PI * 2);
-    ctx.arc(rad * 0.34, -rad * 0.1, rad * 0.07, 0, Math.PI * 2);
+    ctx.ellipse(0, rad * 0.25, rad * 0.28, rad * 0.14, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
+  /** 快跑尸：瘦长冲刺 */
   function drawEnemyFast(e, rad, flash, slow) {
     const fill = bodyFill(e.color, flash, slow, e.kind);
     if (!flash) {
-      ctx.globalAlpha = 0.28;
+      ctx.globalAlpha = 0.25;
       ctx.fillStyle = fill;
       ctx.beginPath();
-      ctx.moveTo(-rad * 1.55, 0);
-      ctx.lineTo(-rad * 0.35, -rad * 0.4);
-      ctx.lineTo(-rad * 0.35, rad * 0.4);
-      ctx.closePath();
-      ctx.fill();
-      ctx.globalAlpha = 0.15;
-      ctx.beginPath();
-      ctx.moveTo(-rad * 1.9, 0);
-      ctx.lineTo(-rad * 0.7, -rad * 0.28);
-      ctx.lineTo(-rad * 0.7, rad * 0.28);
+      ctx.moveTo(-rad * 1.6, 0);
+      ctx.lineTo(-rad * 0.4, -rad * 0.35);
+      ctx.lineTo(-rad * 0.4, rad * 0.35);
       ctx.closePath();
       ctx.fill();
       ctx.globalAlpha = 1;
     }
     ctx.beginPath();
-    ctx.moveTo(rad * 1.15, 0);
-    ctx.lineTo(-rad * 0.15, -rad * 0.55);
-    ctx.lineTo(-rad * 0.85, 0);
-    ctx.lineTo(-rad * 0.15, rad * 0.55);
+    ctx.moveTo(rad * 1.1, 0);
+    ctx.lineTo(-rad * 0.1, -rad * 0.45);
+    ctx.lineTo(-rad * 0.95, 0);
+    ctx.lineTo(-rad * 0.1, rad * 0.45);
     ctx.closePath();
     ctx.fillStyle = fill;
     ctx.fill();
-    ctx.strokeStyle = e.colorDark || "rgba(0,0,0,0.4)";
+    ctx.strokeStyle = e.colorDark || "#558b2f";
     ctx.lineWidth = 1.5;
     ctx.stroke();
+    // 爪
+    ctx.strokeStyle = fill;
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(0, -rad * 0.2);
-    ctx.lineTo(-rad * 0.3, -rad * 0.95);
-    ctx.lineTo(-rad * 0.5, -rad * 0.15);
-    ctx.closePath();
+    ctx.moveTo(rad * 0.2, -rad * 0.25);
+    ctx.lineTo(rad * 0.7, -rad * 0.7);
+    ctx.moveTo(rad * 0.2, rad * 0.25);
+    ctx.lineTo(rad * 0.7, rad * 0.7);
+    ctx.stroke();
+    ctx.fillStyle = flash ? "#333" : "#2e3a18";
+    ctx.beginPath();
+    ctx.arc(rad * 0.35, 0, rad * 0.14, 0, Math.PI * 2);
     ctx.fill();
+    ctx.fillStyle = "#dcedc8";
     ctx.beginPath();
-    ctx.moveTo(0, rad * 0.2);
-    ctx.lineTo(-rad * 0.3, rad * 0.95);
-    ctx.lineTo(-rad * 0.5, rad * 0.15);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = flash ? "#333" : "#5d4037";
-    ctx.beginPath();
-    ctx.arc(rad * 0.35, 0, rad * 0.16, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#fff";
-    ctx.beginPath();
-    ctx.arc(rad * 0.4, -rad * 0.05, rad * 0.06, 0, Math.PI * 2);
+    ctx.arc(rad * 0.4, -rad * 0.04, rad * 0.05, 0, Math.PI * 2);
     ctx.fill();
   }
 
+  /** 坦克尸：臃肿蛮尸 */
   function drawEnemyTank(e, rad, flash, slow) {
     const fill = bodyFill(e.color, flash, slow, e.kind);
-    const dark = flash ? "#bbb" : (slow ? "#64b5f6" : (e.colorDark || "#5d4037"));
-    roundRectPath(-rad * 0.85, -rad * 0.7, rad * 1.7, rad * 1.4, rad * 0.25);
+    const dark = flash ? "#bbb" : (slow ? "#64b5f6" : (e.colorDark || "#4a5a32"));
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rad * 1.05, rad * 0.85, 0, 0, Math.PI * 2);
     ctx.fillStyle = fill;
     ctx.fill();
     ctx.strokeStyle = dark;
     ctx.lineWidth = 2.2;
     ctx.stroke();
-    roundRectPath(-rad * 1.05, -rad * 0.55, rad * 0.35, rad * 1.1, 3);
-    roundRectPath(rad * 0.7, -rad * 0.55, rad * 0.35, rad * 1.1, 3);
+    // 鼓包肩
+    ctx.beginPath();
+    ctx.ellipse(-rad * 0.85, 0, rad * 0.35, rad * 0.55, 0, 0, Math.PI * 2);
+    ctx.ellipse(rad * 0.85, 0, rad * 0.35, rad * 0.55, 0, 0, Math.PI * 2);
     ctx.fillStyle = dark;
     ctx.fill();
-    ctx.strokeStyle = "rgba(0,0,0,0.25)";
-    ctx.lineWidth = 1;
+    if (!flash) {
+      ctx.fillStyle = "rgba(50,60,30,0.4)";
+      ctx.beginPath();
+      ctx.ellipse(0, rad * 0.15, rad * 0.4, rad * 0.25, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = flash ? "#333" : "#1a2010";
     ctx.beginPath();
-    ctx.moveTo(-rad * 0.5, -rad * 0.2);
-    ctx.lineTo(rad * 0.5, -rad * 0.2);
-    ctx.moveTo(-rad * 0.5, rad * 0.25);
-    ctx.lineTo(rad * 0.5, rad * 0.25);
-    ctx.stroke();
-    ctx.fillStyle = flash ? "#333" : "#ffcc80";
-    ctx.fillRect(-rad * 0.35, -rad * 0.15, rad * 0.7, rad * 0.22);
-    ctx.fillStyle = "#1a120c";
-    ctx.fillRect(-rad * 0.25, -rad * 0.08, rad * 0.2, rad * 0.1);
-    ctx.fillRect(rad * 0.05, -rad * 0.08, rad * 0.2, rad * 0.1);
+    ctx.ellipse(-rad * 0.28, -rad * 0.15, rad * 0.18, rad * 0.14, 0, 0, Math.PI * 2);
+    ctx.ellipse(rad * 0.28, -rad * 0.15, rad * 0.18, rad * 0.14, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#a5d6a7";
+    ctx.beginPath();
+    ctx.arc(-rad * 0.22, -rad * 0.15, rad * 0.06, 0, Math.PI * 2);
+    ctx.arc(rad * 0.34, -rad * 0.15, rad * 0.06, 0, Math.PI * 2);
+    ctx.fill();
   }
 
+  /** Boss 尸：巨型尸王 */
   function drawEnemyBoss(e, rad, flash, slow, now) {
     const fill = bodyFill(e.color, flash, slow, e.kind);
-    const pulse = 1 + Math.sin(now * 3) * 0.06;
+    const pulse = 1 + Math.sin(now * 3) * 0.05;
     ctx.beginPath();
-    ctx.arc(0, 0, rad * 1.35 * pulse, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(186,104,200,0.12)";
+    ctx.arc(0, 0, rad * 1.3 * pulse, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(120,140,60,0.14)";
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(0, 0, rad * 1.25 * pulse, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(225,190,231,0.5)";
+    ctx.arc(0, 0, rad * 1.2 * pulse, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(180,200,100,0.45)";
     ctx.lineWidth = 2.5;
     ctx.stroke();
+    // 不规则巨体
     ctx.beginPath();
-    ctx.arc(0, 0, rad * 1.1, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(186,104,200,0.55)";
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(0, 0, rad, 0, Math.PI * 2);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const rr = rad * (0.9 + (i % 2) * 0.18);
+      const px = Math.cos(a) * rr;
+      const py = Math.sin(a) * rr;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
     ctx.fillStyle = fill;
     ctx.fill();
-    ctx.strokeStyle = "#7b1fa2";
+    ctx.strokeStyle = "#4a4728";
     ctx.lineWidth = 2.5;
     ctx.stroke();
+    // 角状骨刺
+    ctx.fillStyle = flash ? "#eee" : "#c5c89a";
     ctx.beginPath();
-    ctx.arc(0, rad * 0.05, rad * 0.65, 0, Math.PI * 2);
-    ctx.fillStyle = flash ? "#eee" : (slow ? "#b3e5fc" : "#ab47bc");
-    ctx.fill();
-    ctx.fillStyle = flash ? "#fff" : "#e1bee7";
-    ctx.beginPath();
-    ctx.moveTo(-rad * 0.55, -rad * 0.55);
-    ctx.lineTo(-rad * 0.35, -rad * 1.15);
-    ctx.lineTo(-rad * 0.1, -rad * 0.55);
+    ctx.moveTo(-rad * 0.4, -rad * 0.6);
+    ctx.lineTo(-rad * 0.25, -rad * 1.2);
+    ctx.lineTo(-rad * 0.05, -rad * 0.55);
     ctx.closePath();
     ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(rad * 0.55, -rad * 0.55);
-    ctx.lineTo(rad * 0.35, -rad * 1.15);
-    ctx.lineTo(rad * 0.1, -rad * 0.55);
+    ctx.moveTo(rad * 0.4, -rad * 0.6);
+    ctx.lineTo(rad * 0.25, -rad * 1.2);
+    ctx.lineTo(rad * 0.05, -rad * 0.55);
     ctx.closePath();
     ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(-rad * 0.12, -rad * 0.7);
+    ctx.moveTo(0, -rad * 0.7);
     ctx.lineTo(0, -rad * 1.35);
-    ctx.lineTo(rad * 0.12, -rad * 0.7);
+    ctx.lineTo(rad * 0.15, -rad * 0.7);
     ctx.closePath();
-    ctx.fillStyle = flash ? "#fff" : "#f3e5f5";
+    ctx.fillStyle = flash ? "#fff" : "#dce775";
     ctx.fill();
-    ctx.strokeStyle = "#6a1b9a";
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.fillStyle = flash ? "#333" : "#1a120c";
+    // 三眼感（略抽象）
+    ctx.fillStyle = flash ? "#333" : "#1a1808";
     ctx.beginPath();
-    ctx.arc(-rad * 0.28, -rad * 0.05, rad * 0.2, 0, Math.PI * 2);
-    ctx.arc(rad * 0.28, -rad * 0.05, rad * 0.2, 0, Math.PI * 2);
+    ctx.arc(-rad * 0.3, -rad * 0.1, rad * 0.16, 0, Math.PI * 2);
+    ctx.arc(rad * 0.3, -rad * 0.1, rad * 0.16, 0, Math.PI * 2);
+    ctx.arc(0, rad * 0.15, rad * 0.12, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#ff4081";
+    ctx.fillStyle = "#ff8a65";
     ctx.beginPath();
-    ctx.arc(-rad * 0.22, -rad * 0.08, rad * 0.08, 0, Math.PI * 2);
-    ctx.arc(rad * 0.34, -rad * 0.08, rad * 0.08, 0, Math.PI * 2);
+    ctx.arc(-rad * 0.25, -rad * 0.12, rad * 0.06, 0, Math.PI * 2);
+    ctx.arc(rad * 0.35, -rad * 0.12, rad * 0.06, 0, Math.PI * 2);
+    ctx.arc(0.04 * rad, rad * 0.13, rad * 0.045, 0, Math.PI * 2);
     ctx.fill();
   }
 
+  /** 盾尸：破甲盾僵尸 */
   function drawEnemyShield(e, rad, flash, slow) {
     const fill = bodyFill(e.color, flash, slow, e.kind);
     ctx.beginPath();
-    ctx.arc(0, 0, rad * 0.75, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, rad * 0.7, rad * 0.75, 0, 0, Math.PI * 2);
     ctx.fillStyle = fill;
     ctx.fill();
-    ctx.strokeStyle = e.colorDark || "#455a64";
+    ctx.strokeStyle = e.colorDark || "#3e4634";
     ctx.lineWidth = 1.5;
     ctx.stroke();
-    ctx.fillStyle = flash ? "#fff" : "#37474f";
-    ctx.fillRect(-rad * 0.4, -rad * 0.85, rad * 0.8, rad * 0.28);
-    ctx.fillStyle = flash ? "#eceff1" : "#607d8b";
+    // 破木盾
+    ctx.fillStyle = flash ? "#eceff1" : "#6d5c45";
     ctx.beginPath();
-    ctx.moveTo(rad * 0.3, -rad * 0.9);
-    ctx.lineTo(rad * 1.2, -rad * 0.55);
-    ctx.lineTo(rad * 1.25, 0);
-    ctx.lineTo(rad * 1.2, rad * 0.55);
-    ctx.lineTo(rad * 0.3, rad * 0.9);
+    ctx.moveTo(rad * 0.25, -rad * 0.85);
+    ctx.lineTo(rad * 1.15, -rad * 0.5);
+    ctx.lineTo(rad * 1.2, 0.05 * rad);
+    ctx.lineTo(rad * 1.1, rad * 0.55);
+    ctx.lineTo(rad * 0.25, rad * 0.85);
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = "#263238";
+    ctx.strokeStyle = "#3e3428";
     ctx.lineWidth = 1.5;
     ctx.stroke();
-    ctx.strokeStyle = flash ? "#fff" : "#90a4ae";
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = flash ? "#fff" : "#a1887f";
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(rad * 0.55, -rad * 0.45);
-    ctx.lineTo(rad * 0.55, rad * 0.45);
-    ctx.moveTo(rad * 0.55, 0);
-    ctx.lineTo(rad * 1.05, 0);
+    ctx.moveTo(rad * 0.5, -rad * 0.4);
+    ctx.lineTo(rad * 0.5, rad * 0.4);
+    ctx.moveTo(rad * 0.5, 0);
+    ctx.lineTo(rad * 1.0, 0);
     ctx.stroke();
+    ctx.fillStyle = flash ? "#333" : "#1a2010";
     ctx.beginPath();
-    ctx.arc(rad * 0.8, 0, rad * 0.18, 0, Math.PI * 2);
-    ctx.fillStyle = flash ? "#fff" : "#ffd54f";
+    ctx.arc(-rad * 0.15, -rad * 0.1, rad * 0.14, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = "#f9a825";
-    ctx.lineWidth = 1;
-    ctx.stroke();
   }
 
+  /** 飞尸：飘浮怨灵尸 */
   function drawEnemyFlyer(e, rad, flash, slow) {
     const fill = bodyFill(e.color, flash, slow, e.kind);
-    ctx.globalAlpha = 0.9;
+    ctx.globalAlpha = 0.88;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rad * 1.25, rad * 0.55, 0, 0, Math.PI * 2);
     ctx.fillStyle = fill;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, rad * 1.35, rad * 0.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = e.colorDark || "#00838f";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(-rad * 1.2, 0);
-    ctx.lineTo(rad * 0.9, 0);
+    ctx.strokeStyle = e.colorDark || "#5a6b3a";
+    ctx.lineWidth = 1.2;
     ctx.stroke();
-    ctx.fillStyle = flash ? "#fff" : (e.colorDark || "#00838f");
+    // 残翼
     ctx.beginPath();
-    ctx.ellipse(rad * 0.2, 0, rad * 0.55, rad * 0.32, 0, 0, Math.PI * 2);
+    ctx.moveTo(-rad * 0.2, -rad * 0.2);
+    ctx.quadraticCurveTo(-rad * 1.1, -rad * 0.9, -rad * 0.5, -rad * 0.05);
+    ctx.closePath();
+    ctx.fillStyle = flash ? "#fff" : "rgba(176,191,136,0.55)";
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(rad * 0.7, 0, rad * 0.22, 0, Math.PI * 2);
+    ctx.moveTo(-rad * 0.2, rad * 0.2);
+    ctx.quadraticCurveTo(-rad * 1.1, rad * 0.9, -rad * 0.5, rad * 0.05);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(rad * 0.55, 0, rad * 0.28, 0, Math.PI * 2);
     ctx.fillStyle = fill;
     ctx.fill();
-    ctx.fillStyle = flash ? "#333" : "#004d40";
+    ctx.fillStyle = flash ? "#333" : "#2e3a18";
     ctx.beginPath();
-    ctx.arc(rad * 0.78, -rad * 0.05, rad * 0.08, 0, Math.PI * 2);
+    ctx.arc(rad * 0.65, -rad * 0.05, rad * 0.1, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#e0f7fa";
+    ctx.fillStyle = "#dcedc8";
     ctx.beginPath();
-    ctx.arc(-rad * 1.15, 0, 2, 0, Math.PI * 2);
-    ctx.arc(-rad * 0.3, -rad * 0.35, 1.5, 0, Math.PI * 2);
-    ctx.arc(-rad * 0.3, rad * 0.35, 1.5, 0, Math.PI * 2);
+    ctx.arc(rad * 0.7, -rad * 0.08, rad * 0.04, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
-    ctx.strokeStyle = "rgba(128,222,234,0.6)";
+    ctx.strokeStyle = "rgba(200,220,140,0.45)";
     ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.ellipse(0, 0, rad * 1.4, rad * 0.55, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, rad * 1.35, rad * 0.6, 0, 0, Math.PI * 2);
     ctx.stroke();
   }
 
@@ -1961,19 +1961,20 @@
     const bx = e.x - bw / 2;
     const by = e.y - rad - (e.kind === "boss" ? 14 : 10);
     roundRectPath(bx - 1, by - 1, bw + 2, bh + 2, 2);
-    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillStyle = "rgba(20,24,12,0.65)";
     ctx.fill();
     const ratio = Math.max(0, e.hp / e.maxHp);
-    const col = ratio > 0.5 ? "#66bb6a" : ratio > 0.25 ? "#ffb74d" : "#ef5350";
+    // 尸潮感：黄绿→土黄→暗褐红，避免血腥夸张
+    const col = ratio > 0.5 ? "#9ccc65" : ratio > 0.25 ? "#c0a050" : "#a06050";
     if (ratio > 0) {
       roundRectPath(bx, by, bw * ratio, bh, 1.5);
       ctx.fillStyle = col;
       ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,0.28)";
+      ctx.fillStyle = "rgba(220,240,180,0.3)";
       ctx.fillRect(bx + 1, by + 1, Math.max(0, bw * ratio - 2), 1.5);
     }
     if (e.kind === "boss") {
-      ctx.strokeStyle = "rgba(225,190,231,0.55)";
+      ctx.strokeStyle = "rgba(180,200,100,0.55)";
       ctx.lineWidth = 1;
       ctx.strokeRect(bx - 0.5, by - 0.5, bw + 1, bh + 1);
     }

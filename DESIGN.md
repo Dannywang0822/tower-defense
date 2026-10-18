@@ -34,4 +34,4 @@
 可提前下一波获约5金。胜利：清完第30波且生命＞0。
 
 ## 部署
-`https://dannywang0822.github.io/tower-defense/?v=7`
+`https://dannywang0822.github.io/tower-defense/?v=8`

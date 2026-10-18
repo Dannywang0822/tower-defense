@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#1a2332" />
+  <meta name="theme-color" content="#1a1610" />
   <title>路卫 — Coinpath Defense</title>
-  <link rel="stylesheet" href="styles.css?v=7" />
+  <link rel="stylesheet" href="styles.css?v=8" />
 </head>
 <body>
   <div id="app">
     <header id="hud">
       <div class="hud-item" title="生命">
-        <span class="hud-icon">❤</span>
+        <span class="hud-icon">🛡</span>
         <span id="hud-lives">20</span>
       </div>
       <div class="hud-item" title="金币">
@@ -19,7 +19,7 @@
         <span id="hud-gold">120</span>
       </div>
       <div class="hud-item" title="波次">
-        <span class="hud-icon">⚔</span>
+        <span class="hud-icon">🧟</span>
         <span id="hud-wave">0/30</span>
       </div>
       <div class="hud-item hud-status" id="hud-status">准备就绪</div>
@@ -32,7 +32,7 @@
 
     <aside id="panel">
       <div id="build-panel" class="panel-block">
-        <div class="panel-title">建造</div>
+        <div class="panel-title">城防建造</div>
         <div class="tower-btns">
           <button type="button" class="tower-btn" data-type="arrow" id="btn-arrow">
             <span class="tb-name">箭塔</span>
@@ -50,7 +50,7 @@
             <span class="tb-desc">减速</span>
           </button>
         </div>
-        <p class="hint">点空地建造 · 点已有塔升级/卖掉</p>
+        <p class="hint">点空地筑塔 · 点城垛升级/拆卖</p>
       </div>
 
       <div id="select-panel" class="panel-block hidden">
@@ -77,6 +77,6 @@
       </div>
     </div>
   </div>
-  <script src="game.js?v=7"></script>
+  <script src="game.js?v=8"></script>
 </body>
 </html>
