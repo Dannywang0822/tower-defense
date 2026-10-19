@@ -605,3 +605,9 @@ html, body {
   .diff-btns { grid-template-columns: repeat(2, 1fr); }
   #hud-diff-wrap { display: none; }
 }
+
+/* v14: stage frame tint only — HUD, pause, and speed controls stay as shipped */
+body[data-decor="fog"] #stage-wrap { border-color: #6a6880; }
+body[data-decor="snow"] #stage-wrap { border-color: #7f93a8; }
+body[data-decor="lava"] #stage-wrap { border-color: #8a4a32; }
+body[data-decor="toxic"] #stage-wrap { border-color: #5e7a48; }
