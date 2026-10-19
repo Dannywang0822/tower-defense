@@ -1254,7 +1254,7 @@
     if (startStageHint) {
       const d = DIFFICULTIES[menuDiff];
       startStageHint.textContent =
-        `地图阶 ${st} · 生命 ${d.lives} · 开局金 ${START_GOLD_BASE + d.goldBonus} · 怪血×${d.hp}`;
+        `地图阶 ${st} · ${sceneSkinFor(st).name} · 生命 ${d.lives} · 开局金 ${START_GOLD_BASE + d.goldBonus} · 怪血×${d.hp}`;
     }
   }
 
@@ -1855,6 +1855,11 @@
       ctx.setLineDash([]);
     }
 
+    drawSceneWash(skin, w, h);
+    if (document.body.dataset.decor !== skin.decor) {
+      document.body.dataset.decor = skin.decor;
+    }
+
     const entry = pathPoints[0];
     const exit = pathPoints[pathPoints.length - 1];
     drawZombieSpawn(entry.x, entry.y, now);
@@ -1956,6 +1961,8 @@
       ctx.globalAlpha = 1;
     }
 
+    drawSceneMotes(skin, w, h, now);
+
     // 轻 vignette（随场景）
     const vig = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.max(w, h) * 0.72);
     vig.addColorStop(0, "rgba(0,0,0,0)");
@@ -1969,6 +1976,85 @@
     ctx.fillText(`路卫 · ${skin.name}`, w / 2, cellSize * 0.4);
   }
 
+
+  function drawSceneWash(skin, w, h) {
+    const tops = {
+      brick: "rgba(64,44,20,0.07)",
+      fog: "rgba(48,42,78,0.24)",
+      snow: "rgba(176,206,240,0.16)",
+      lava: "rgba(96,28,0,0.16)",
+      toxic: "rgba(18,46,18,0.2)",
+    };
+    const bots = {
+      brick: "rgba(0,0,0,0.1)",
+      fog: "rgba(4,6,14,0.2)",
+      snow: "rgba(6,14,26,0.16)",
+      lava: "rgba(36,6,0,0.22)",
+      toxic: "rgba(2,14,6,0.2)",
+    };
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, tops[skin.decor] || "rgba(0,0,0,0)");
+    g.addColorStop(0.55, "rgba(0,0,0,0)");
+    g.addColorStop(1, bots[skin.decor] || "rgba(0,0,0,0.08)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+    if (skin.decor === "fog" || skin.decor === "snow" || skin.decor === "brick") {
+      const mx = w * 0.82;
+      const my = h * 0.055;
+      const mr = Math.max(7, Math.min(w, h) * 0.034);
+      ctx.beginPath();
+      ctx.arc(mx, my, mr, 0, Math.PI * 2);
+      ctx.fillStyle = skin.decor === "brick" ? "rgba(255,226,180,0.38)" : "rgba(230,238,255,0.55)";
+      ctx.fill();
+    }
+  }
+
+  function drawSceneMotes(skin, w, h, now) {
+    const n = skin.decor === "fog" ? 12 : 22;
+    for (let i = 0; i < n; i++) {
+      const seed = i * 97.13;
+      if (skin.decor === "snow") {
+        const x = ((seed * 13 + Math.sin(now * 0.6 + i) * 14 + now * (16 + (i % 5) * 5)) % (w + 24)) - 12;
+        const y = ((seed * 7 + now * (26 + (i % 6) * 8)) % (h + 24)) - 12;
+        ctx.globalAlpha = 0.4 + (i % 4) * 0.1;
+        ctx.fillStyle = "rgba(255,255,255,0.9)";
+        ctx.fillRect(x, y, i % 3 === 0 ? 2.1 : 1.4, i % 3 === 0 ? 2.1 : 1.4);
+      } else if (skin.decor === "lava") {
+        const x = ((seed * 19) % (w + 16)) - 8 + Math.sin(now * 1.3 + i) * 8;
+        const y = h - ((seed + now * (20 + (i % 5) * 12)) % (h + 36));
+        ctx.globalAlpha = 0.35 + Math.abs(Math.sin(now * 6 + i)) * 0.5;
+        ctx.fillStyle = i % 4 === 0 ? "rgba(255,220,120,0.9)" : "rgba(255,130,40,0.8)";
+        ctx.beginPath();
+        ctx.arc(x, y, i % 5 === 0 ? 2 : 1.25, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (skin.decor === "fog") {
+        const x = ((seed * 11 + now * (7 + (i % 3) * 3)) % (w + 70)) - 30;
+        const y = ((seed * 5) % h) + Math.sin(now * 0.35 + i) * 6;
+        ctx.globalAlpha = 0.05 + (i % 3) * 0.02;
+        ctx.fillStyle = "rgba(190,196,214,0.9)";
+        ctx.beginPath();
+        ctx.ellipse(x, y, 26 + (i % 4) * 8, 9, 0, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (skin.decor === "toxic") {
+        const x = ((seed * 17 + now * (9 + (i % 4) * 3)) % (w + 16)) - 8;
+        const y = ((seed * 9 + Math.sin(now * 0.7 + i) * 18) % (h + 16)) - 8;
+        ctx.globalAlpha = 0.22 + (i % 3) * 0.1;
+        ctx.fillStyle = "rgba(186,220,110,0.7)";
+        ctx.beginPath();
+        ctx.arc(x, y, 1.35, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        const x = ((seed * 13 + now * (10 + (i % 4) * 3)) % (w + 20)) - 10;
+        const y = ((seed * 23) % (h + 12)) - 6 + Math.sin(now * 0.4 + i) * 6;
+        ctx.globalAlpha = 0.14 + (i % 4) * 0.06;
+        ctx.fillStyle = "rgba(220,190,130,0.7)";
+        ctx.beginPath();
+        ctx.arc(x, y, 1.1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
 
   function drawTileDecor(skin, x, y, cs, seed, now) {
     if (skin.decor === "brick") {
@@ -1994,12 +2080,18 @@
         ctx.fill();
       }
       if (seed === 2 || seed === 11) {
-        ctx.strokeStyle = "rgba(120,140,160,0.22)";
+        const hx = x + cs * 0.28;
+        const hy = y + cs * 0.22;
+        ctx.fillStyle = "rgba(168,172,186,0.55)";
+        ctx.fillRect(hx, hy, cs * 0.16, cs * 0.28);
+        ctx.fillRect(hx - cs * 0.03, hy + cs * 0.26, cs * 0.22, cs * 0.045);
+        ctx.strokeStyle = "rgba(40,44,58,0.7)";
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(x + cs * 0.2, y + cs * 0.75);
-        ctx.lineTo(x + cs * 0.35, y + cs * 0.35);
-        ctx.lineTo(x + cs * 0.5, y + cs * 0.75);
+        ctx.moveTo(hx + cs * 0.08, hy + cs * 0.05);
+        ctx.lineTo(hx + cs * 0.08, hy + cs * 0.16);
+        ctx.moveTo(hx + cs * 0.04, hy + cs * 0.1);
+        ctx.lineTo(hx + cs * 0.12, hy + cs * 0.1);
         ctx.stroke();
       }
     } else if (skin.decor === "snow") {
@@ -2036,10 +2128,17 @@
         ctx.ellipse(x + cs * 0.45, y + cs * 0.6, cs * 0.22, cs * 0.1, 0.2, 0, Math.PI * 2);
         ctx.fill();
       }
-      if (seed === 5) {
-        ctx.fillStyle = "rgba(160,220,90,0.2)";
+      if (seed === 5 || seed === 12) {
+        ctx.strokeStyle = "rgba(110,160,70,0.55)";
+        ctx.lineWidth = 1.15;
+        const bx = x + cs * (0.3 + (seed % 3) * 0.12);
         ctx.beginPath();
-        ctx.arc(x + cs * 0.3, y + cs * 0.3, 1.5, 0, Math.PI * 2);
+        ctx.moveTo(bx, y + cs * 0.78);
+        ctx.quadraticCurveTo(bx + 2, y + cs * 0.42, bx - 1, y + cs * 0.2);
+        ctx.stroke();
+        ctx.fillStyle = "rgba(150,190,80,0.4)";
+        ctx.beginPath();
+        ctx.ellipse(bx - 1, y + cs * 0.2, 2.1, 1.1, -0.4, 0, Math.PI * 2);
         ctx.fill();
       }
     }
@@ -2124,14 +2223,34 @@
   }
 
   /** 入口：僵尸裂隙 */
+  function portalColors(decor) {
+    if (decor === "fog") return { ring: "rgba(176,186,214,0.8)", fill: "#12141c", stroke: "#c5cbe0", core: "rgba(150,160,190,0.6)", glyph: "#f0eef8" };
+    if (decor === "snow") return { ring: "rgba(186,220,255,0.85)", fill: "#15202c", stroke: "#d7ecff", core: "rgba(170,215,255,0.62)", glyph: "#f4fbff" };
+    if (decor === "lava") return { ring: "rgba(255,120,40,0.88)", fill: "#1a0a06", stroke: "#ffab70", core: "rgba(255,90,20,0.72)", glyph: "#ffe0b2" };
+    if (decor === "toxic") return { ring: "rgba(150,200,80,0.78)", fill: "#101810", stroke: "#c5e1a5", core: "rgba(110,170,60,0.62)", glyph: "#f1f8e9" };
+    return { ring: "rgba(140,180,70,0.9)", fill: "#1a2014", stroke: "#8bc34a", core: "rgba(124,179,66,0.7)", glyph: "#0a1008" };
+  }
+
+  function gateColors(decor) {
+    if (decor === "fog") return { stone: "#5c6070", edge: "#2c3040", cren: "#8a90a4", arch: "#0c0e14", trim: "#d5d8ea", flag: "#ece8f4", pole: "#6a7080", glow: "rgba(190,196,220,0.65)", glyph: "#f7f4ff" };
+    if (decor === "snow") return { stone: "#6e7c8c", edge: "#2c3a48", cren: "#d5e2ee", arch: "#101820", trim: "#e3f2fd", flag: "#90caf9", pole: "#546e7a", glow: "rgba(180,220,255,0.7)", glyph: "#f5fbff" };
+    if (decor === "lava") return { stone: "#5c3a2e", edge: "#2a1610", cren: "#8a5644", arch: "#0c0604", trim: "#ffb74d", flag: "#e65100", pole: "#6d4c41", glow: "rgba(255,120,40,0.72)", glyph: "#ffe0b2" };
+    if (decor === "toxic") return { stone: "#4e5a40", edge: "#243024", cren: "#6e7c58", arch: "#0c120c", trim: "#c5e1a5", flag: "#7cb342", pole: "#5d6b4a", glow: "rgba(160,200,80,0.55)", glyph: "#f1f8e9" };
+    return { stone: "#5a4a36", edge: "#3e3428", cren: "#6d5c45", arch: "#1a120c", trim: "#d4af55", flag: "#c62828", pole: "#8d6e63", glow: "rgba(212,175,85,0.7)", glyph: "#ffecb3" };
+  }
+
   function drawZombieSpawn(x, y, now) {
+    const skin = sceneSkinFor(state.stage || 1);
+    const pal = portalColors(skin.decor);
     const r = cellSize * 0.34;
     const pulse = 0.35 + Math.sin(now * 2.6) * 0.12;
     ctx.beginPath();
     ctx.arc(x, y, r + 8, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(140,180,70,${pulse})`;
+    ctx.strokeStyle = pal.ring;
+    ctx.globalAlpha = 0.55 + pulse * 0.4;
     ctx.lineWidth = 4;
     ctx.stroke();
+    ctx.globalAlpha = 1;
     // 不规则裂口
     ctx.beginPath();
     for (let i = 0; i < 7; i++) {
@@ -2143,16 +2262,38 @@
       else ctx.lineTo(px, py);
     }
     ctx.closePath();
-    ctx.fillStyle = "#1a2014";
+    ctx.fillStyle = pal.fill;
     ctx.fill();
-    ctx.strokeStyle = "#8bc34a";
+    ctx.strokeStyle = pal.stroke;
     ctx.lineWidth = 2;
     ctx.stroke();
+    if (skin.decor === "fog") {
+      ctx.strokeStyle = "rgba(220,220,235,0.55)";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(x, y - r * 0.55);
+      ctx.lineTo(x, y + r * 0.12);
+      ctx.moveTo(x - r * 0.26, y - r * 0.22);
+      ctx.lineTo(x + r * 0.26, y - r * 0.22);
+      ctx.stroke();
+    } else if (skin.decor === "snow") {
+      ctx.strokeStyle = "rgba(225,245,254,0.75)";
+      ctx.lineWidth = 1.1;
+      for (let k = 0; k < 4; k++) {
+        const a = (k / 4) * Math.PI * 2 + now * 0.25;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + Math.cos(a) * r * 0.62, y + Math.sin(a) * r * 0.62);
+        ctx.stroke();
+      }
+    }
     ctx.beginPath();
     ctx.arc(x, y, r * 0.45, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(124,179,66,${0.55 + pulse * 0.3})`;
+    ctx.fillStyle = pal.core;
+    ctx.globalAlpha = 0.75 + pulse * 0.2;
     ctx.fill();
-    ctx.fillStyle = "#0a1008";
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = pal.glyph;
     ctx.font = `700 ${Math.max(9, cellSize * 0.22)}px sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -2161,21 +2302,24 @@
 
   /** 出口：城堡门 */
   function drawCastleGate(x, y, now) {
+    const skin = sceneSkinFor(state.stage || 1);
+    const g = gateColors(skin.decor);
     const s = cellSize;
     const pulse = 0.3 + Math.sin(now * 2.2 + 1.2) * 0.1;
-    // 暖金光环
     ctx.beginPath();
     ctx.arc(x, y, s * 0.42, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(212,175,85,${pulse})`;
+    ctx.strokeStyle = g.glow;
+    ctx.globalAlpha = 0.45 + pulse;
     ctx.lineWidth = 3.5;
     ctx.stroke();
+    ctx.globalAlpha = 1;
     // 石门主体
     const bw = s * 0.55;
     const bh = s * 0.62;
     roundRectPath(x - bw / 2, y - bh / 2, bw, bh, 3);
-    ctx.fillStyle = "#5a4a36";
+    ctx.fillStyle = g.stone;
     ctx.fill();
-    ctx.strokeStyle = "#3e3428";
+    ctx.strokeStyle = g.edge;
     ctx.lineWidth = 2;
     ctx.stroke();
     // 城垛顶
@@ -2183,8 +2327,12 @@
     const tw = bw / teeth;
     for (let i = 0; i < teeth; i++) {
       if (i % 2 === 1) continue;
-      ctx.fillStyle = "#6d5c45";
+      ctx.fillStyle = g.cren;
       ctx.fillRect(x - bw / 2 + i * tw, y - bh / 2 - s * 0.1, tw * 0.9, s * 0.12);
+      if (skin.decor === "snow") {
+        ctx.fillStyle = "rgba(236,246,255,0.92)";
+        ctx.fillRect(x - bw / 2 + i * tw, y - bh / 2 - s * 0.1, tw * 0.9, s * 0.04);
+      }
     }
     // 拱门洞
     ctx.beginPath();
@@ -2193,26 +2341,35 @@
     ctx.quadraticCurveTo(x, y - bh * 0.38, x + bw * 0.22, y - bh * 0.05);
     ctx.lineTo(x + bw * 0.22, y + bh * 0.35);
     ctx.closePath();
-    ctx.fillStyle = "#1a120c";
+    ctx.fillStyle = g.arch;
     ctx.fill();
-    ctx.strokeStyle = "#d4af55";
+    if (skin.decor === "lava") {
+      ctx.fillStyle = "rgba(255,100,30,0.4)";
+      ctx.fill();
+    }
+    ctx.strokeStyle = g.trim;
     ctx.lineWidth = 1.5;
     ctx.stroke();
     // 小旗
-    ctx.strokeStyle = "#8d6e63";
+    if (skin.decor === "toxic") {
+      ctx.fillStyle = "rgba(110,160,60,0.5)";
+      ctx.fillRect(x - bw * 0.32, y + bh * 0.18, 4, 3);
+    }
+    ctx.strokeStyle = g.pole;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(x + bw * 0.38, y - bh * 0.45);
     ctx.lineTo(x + bw * 0.38, y - bh * 0.75);
     ctx.stroke();
-    ctx.fillStyle = "#c62828";
+    const flutter = Math.sin(now * 3) * bw * 0.04;
+    ctx.fillStyle = g.flag;
     ctx.beginPath();
     ctx.moveTo(x + bw * 0.38, y - bh * 0.75);
-    ctx.lineTo(x + bw * 0.58, y - bh * 0.65);
+    ctx.lineTo(x + bw * 0.58 + flutter, y - bh * 0.65);
     ctx.lineTo(x + bw * 0.38, y - bh * 0.55);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = "#ffecb3";
+    ctx.fillStyle = g.glyph;
     ctx.font = `700 ${Math.max(9, s * 0.2)}px sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -2504,6 +2661,19 @@
     const t = gameNow;
     const wob = Math.sin(t * 6 + e.progress * 0.02) * rad * 0.04;
     ctx.translate(0, wob);
+    ctx.strokeStyle = flash ? "#eceff1" : (slow ? "#64b5f6" : (e.colorDark || "#33691e"));
+    ctx.lineWidth = Math.max(1.5, rad * 0.16);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(-rad * 0.5, rad * 0.05);
+    ctx.lineTo(-rad * 1.02, rad * 0.42);
+    ctx.moveTo(rad * 0.48, rad * 0.12);
+    ctx.lineTo(rad * 1.02, rad * 0.48);
+    ctx.moveTo(-rad * 0.12, rad * 0.5);
+    ctx.lineTo(-rad * 0.32, rad * 0.95);
+    ctx.moveTo(rad * 0.18, rad * 0.52);
+    ctx.lineTo(rad * 0.38, rad * 0.96);
+    ctx.stroke();
     // 外轮廓软光
     ctx.beginPath();
     ctx.ellipse(0, rad * 0.15, rad * 0.95, rad * 0.75, 0, 0, Math.PI * 2);
@@ -2546,11 +2716,15 @@
     ctx.ellipse(-rad * 0.28, -rad * 0.22, rad * 0.17, rad * 0.21, -0.2, 0, Math.PI * 2);
     ctx.ellipse(rad * 0.3, -rad * 0.2, rad * 0.15, rad * 0.19, 0.15, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#dcedc8";
+    ctx.save();
+    ctx.shadowColor = flash ? "#ffffff" : "#e8ffc8";
+    ctx.shadowBlur = flash ? 0 : Math.max(3, rad * 0.45);
+    ctx.fillStyle = flash ? "#ffffff" : "#dcedc8";
     ctx.beginPath();
     ctx.arc(-rad * 0.22, -rad * 0.24, rad * 0.055, 0, Math.PI * 2);
     ctx.arc(rad * 0.35, -rad * 0.22, rad * 0.05, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
     ctx.fillStyle = flash ? "#555" : "#2a1212";
     ctx.beginPath();
     ctx.ellipse(0, rad * 0.28, rad * 0.3, rad * 0.15, 0, 0, Math.PI * 2);
@@ -2619,10 +2793,14 @@
     ctx.beginPath();
     ctx.arc(rad * 0.4, 0, rad * 0.15, 0, Math.PI * 2);
     ctx.fill();
+    ctx.save();
+    ctx.shadowColor = "#f0ffe0";
+    ctx.shadowBlur = flash ? 0 : Math.max(3, rad * 0.4);
     ctx.fillStyle = "#f0ffe0";
     ctx.beginPath();
     ctx.arc(rad * 0.46, -rad * 0.04, rad * 0.055, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
     ctx.fillStyle = "rgba(255,220,120,0.55)";
     ctx.beginPath();
     ctx.arc(rad * 0.5, -rad * 0.05, rad * 0.025, 0, Math.PI * 2);
@@ -2678,11 +2856,15 @@
     ctx.ellipse(-rad * 0.28, -rad * 0.18, rad * 0.19, rad * 0.15, 0, 0, Math.PI * 2);
     ctx.ellipse(rad * 0.28, -rad * 0.18, rad * 0.19, rad * 0.15, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.save();
+    ctx.shadowColor = "#c5e1a5";
+    ctx.shadowBlur = flash ? 0 : Math.max(3, rad * 0.35);
     ctx.fillStyle = "#a5d6a7";
     ctx.beginPath();
     ctx.arc(-rad * 0.22, -rad * 0.18, rad * 0.065, 0, Math.PI * 2);
     ctx.arc(rad * 0.34, -rad * 0.18, rad * 0.065, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
   }
 
   /** Boss 尸：脉动光环 + 角冠 + 多层甲 */
@@ -2751,12 +2933,16 @@
     ctx.arc(0, rad * 0.18, rad * 0.13, 0, Math.PI * 2);
     ctx.fill();
     const eyePulse = 0.55 + Math.sin(now * 5) * 0.25;
+    ctx.save();
+    ctx.shadowColor = "#ff8a65";
+    ctx.shadowBlur = flash ? 0 : Math.max(4, rad * 0.4);
     ctx.fillStyle = `rgba(255,120,80,${eyePulse})`;
     ctx.beginPath();
     ctx.arc(-rad * 0.26, -rad * 0.14, rad * 0.065, 0, Math.PI * 2);
     ctx.arc(rad * 0.38, -rad * 0.14, rad * 0.065, 0, Math.PI * 2);
     ctx.arc(0.04 * rad, rad * 0.16, rad * 0.05, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
   }
 
   /** 盾尸：立体破盾 + 徽记 */
