@@ -1,6 +1,7 @@
 /**
  * 路卫 — Coinpath Defense
- * 竖屏「几」字形路径塔防 · 纯 Canvas · 30 波
+ * 竖屏「几」字形路径塔防 · 纯 Canvas
+ * 1000 关 × 每关 30 波 · 难度档 · 地图阶
  */
 (() => {
   "use strict";
@@ -8,15 +9,16 @@
   // ---------- 常量 ----------
   const COLS = 8;
   const ROWS = 12;
-  const TOTAL_WAVES = 30;
-  const START_LIVES = 20;
-  const START_GOLD = 120;
-  const WAVE_REST_DEFAULT = 4;
+  const TOTAL_LEVELS = 1000;
+  const WAVES_PER_LEVEL = 30;
+  const START_GOLD_BASE = 120;
   const SELL_RATIO = 0.6;
   const BASE_HP = 40;
   const BASE_SPEED = 1.0; // 格/秒
   const BASE_REWARD = 8;
   const MAX_PARTICLES = 80;
+  const WAVE_REST_DEFAULT = 4;
+  const SAVE_KEY = "coinpath_v12";
 
   const TOWER_DEFS = {
     arrow: {
@@ -58,34 +60,113 @@
     },
   };
 
-  const PATH_CELLS = buildPath();
+  /** 难度档：选关前选，全局乘子 */
+  const DIFFICULTIES = {
+    patrol: { key: "patrol", name: "巡城", hp: 1.0, speed: 1.0, reward: 1.0, goldBonus: 0, lives: 20 },
+    hold: { key: "hold", name: "固守", hp: 1.25, speed: 1.08, reward: 1.05, goldBonus: 0, lives: 20 },
+    blood: { key: "blood", name: "血战", hp: 1.55, speed: 1.15, reward: 1.1, goldBonus: 20, lives: 20 },
+    abyss: { key: "abyss", name: "绝境", hp: 2.0, speed: 1.22, reward: 1.15, goldBonus: 40, lives: 15 },
+  };
 
-  function buildPath() {
+  // 可变路径（随关卡 seed / 地图阶重建）
+  let PATH_CELLS = [];
+  let PATH_SET = new Set();
+
+  function mapStage(level) {
+    return Math.floor((Math.max(1, level) - 1) / 30) + 1;
+  }
+
+  function hashSeed(level, diffKey) {
+    const diffId = DIFFICULTIES[diffKey] ? DIFFICULTIES[diffKey].key.length + Object.keys(DIFFICULTIES).indexOf(diffKey) * 17 : 0;
+    let h = (level * 2654435761) ^ (diffId * 2246822519) ^ 0x9e3779b9;
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    return (h >>> 0);
+  }
+
+  function mulberry32(a) {
+    return function () {
+      a |= 0;
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function expandPolyline(waypoints) {
     const cells = [];
     const push = (c, r) => {
+      c = Math.max(0, Math.min(COLS - 1, c));
+      r = Math.max(0, Math.min(ROWS - 1, r));
       if (!cells.length || cells[cells.length - 1][0] !== c || cells[cells.length - 1][1] !== r) {
         cells.push([c, r]);
       }
     };
-    let c = 2, r = 0;
-    for (; r <= 2; r++) push(c, r);
-    for (c = 3; c <= 5; c++) push(c, 2);
-    for (r = 3; r <= 5; r++) push(5, r);
-    for (c = 4; c >= 2; c--) push(c, 5);
-    for (r = 6; r <= 8; r++) push(2, r);
-    for (c = 3; c <= 5; c++) push(c, 8);
-    for (r = 9; r <= 11; r++) push(5, r);
+    for (let i = 0; i < waypoints.length - 1; i++) {
+      let [c0, r0] = waypoints[i];
+      let [c1, r1] = waypoints[i + 1];
+      push(c0, r0);
+      while (c0 !== c1 || r0 !== r1) {
+        if (c0 < c1) c0++;
+        else if (c0 > c1) c0--;
+        else if (r0 < r1) r0++;
+        else if (r0 > r1) r0--;
+        push(c0, r0);
+      }
+    }
     return cells;
   }
 
-  const PATH_SET = new Set(PATH_CELLS.map(([c, r]) => `${c},${r}`));
+  /** 6～8 条预置折线骨架（复杂度递增） */
+  const PATH_SKELETONS = [
+    // 0 经典几字
+    [[2, 0], [2, 2], [5, 2], [5, 5], [2, 5], [2, 8], [5, 8], [5, 11]],
+    // 1 左偏几字
+    [[1, 0], [1, 3], [4, 3], [4, 6], [1, 6], [1, 9], [6, 9], [6, 11]],
+    // 2 右偏几字
+    [[5, 0], [5, 2], [2, 2], [2, 5], [6, 5], [6, 8], [3, 8], [3, 11]],
+    // 3 多折
+    [[3, 0], [3, 2], [6, 2], [6, 4], [1, 4], [1, 7], [5, 7], [5, 9], [2, 9], [2, 11]],
+    // 4 密折 zigzag
+    [[2, 0], [2, 1], [6, 1], [6, 3], [1, 3], [1, 5], [6, 5], [6, 7], [2, 7], [2, 9], [5, 9], [5, 11]],
+    // 5 S 密径
+    [[1, 0], [1, 2], [6, 2], [6, 4], [2, 4], [2, 6], [6, 6], [6, 8], [1, 8], [1, 10], [4, 10], [4, 11]],
+    // 6 蛇形长径
+    [[4, 0], [4, 1], [1, 1], [1, 3], [6, 3], [6, 5], [1, 5], [1, 7], [6, 7], [6, 9], [2, 9], [2, 11]],
+    // 7 最密迷宫折
+    [[2, 0], [2, 1], [5, 1], [5, 2], [1, 2], [1, 4], [6, 4], [6, 6], [1, 6], [1, 8], [7, 8], [7, 10], [3, 10], [3, 11]],
+  ];
+
+  function pickSkeletonIndex(stage, seed) {
+    const rng = mulberry32(seed);
+    // 阶越高，从更密的骨架池里抽
+    const maxIdx = Math.min(PATH_SKELETONS.length - 1, 2 + Math.floor((stage - 1) * 0.45));
+    const minIdx = Math.min(maxIdx, Math.floor((stage - 1) / 4));
+    const span = Math.max(1, maxIdx - minIdx + 1);
+    return minIdx + Math.floor(rng() * span);
+  }
+
+  function buildPathForLevel(level, diffKey) {
+    const stage = mapStage(level);
+    const seed = hashSeed(level, diffKey);
+    const idx = pickSkeletonIndex(stage, seed);
+    const cells = expandPolyline(PATH_SKELETONS[idx]);
+    return { cells, seed, stage, skeleton: idx };
+  }
+
+  function applyPathCells(cells) {
+    PATH_CELLS.length = 0;
+    for (const c of cells) PATH_CELLS.push(c);
+    PATH_SET = new Set(PATH_CELLS.map(([c, r]) => `${c},${r}`));
+  }
 
   function normalReward(hpMul) {
     return Math.max(1, Math.round(BASE_REWARD * Math.sqrt(hpMul)));
   }
 
-  /** 波次 1–30；第12为中Boss检定，第30为终局 */
-  function wavePlan(n) {
+  /** 关内波型模板 1–30（原表） */
+  function baseWavePlan(n) {
     switch (n) {
       case 1: return [{ kind: "normal", count: 6, speedMul: 1.0, hpMul: 1.0 }];
       case 2: return [{ kind: "normal", count: 8, speedMul: 1.0, hpMul: 1.1 }];
@@ -195,7 +276,6 @@
           { kind: "tank", count: 4, speedMul: 0.65, hpMul: 3.5 * 1.55, reward: 38 },
         ];
       case 28:
-        // ~24 混编：40%快跑 30%盾 20%普 10%坦克
         return [
           { kind: "fast", count: 10, speedMul: 1.4, hpMul: 0.7 * 3.4, reward: 14 },
           { kind: "shield", count: 7, speedMul: 0.85, hpMul: 3.4, reward: 22 },
@@ -219,6 +299,73 @@
     }
   }
 
+  function remapKind(kind, stage) {
+    if (kind === "shield" && stage < 2) return "tank";
+    if (kind === "flyer" && stage < 3) return "fast";
+    return kind;
+  }
+
+  /**
+   * 程序化波次：关内波 w∈[1,30] × 难度档 × 地图阶
+   * 依赖 state.level / state.difficulty / state.stage
+   */
+  function wavePlan(w) {
+    const stage = state.stage || 1;
+    const diff = DIFFICULTIES[state.difficulty] || DIFFICULTIES.patrol;
+    const stageHp = 1 + 0.06 * (stage - 1);
+    const stageSpd = 1 + 0.02 * (stage - 1);
+    const countMul = 1 + 0.015 * (stage - 1);
+    const milestoneBoss = state.level % 30 === 0 && w === 30;
+
+    let plan = baseWavePlan(w).map((g) => ({ ...g, kind: remapKind(g.kind, stage) }));
+
+    // 新怪注入（按地图阶解锁）
+    if (stage >= 5 && (w === 14 || w === 22 || w === 28)) {
+      plan.push({
+        kind: "splitter",
+        count: Math.max(2, Math.round(2 + stage * 0.25)),
+        speedMul: 1.1,
+        hpMul: 1.6 + stage * 0.05,
+        reward: 15,
+      });
+    }
+    if (stage >= 8 && (w === 16 || w === 25 || w === 29)) {
+      plan.push({
+        kind: "healer",
+        count: Math.max(1, Math.round(1 + stage * 0.12)),
+        speedMul: 0.85,
+        hpMul: 2.0 + stage * 0.04,
+        reward: 20,
+      });
+    }
+    if (stage >= 12 && (w === 19 || w === 23 || w === 27)) {
+      plan.push({
+        kind: "blinker",
+        count: Math.max(2, Math.round(2 + stage * 0.18)),
+        speedMul: 1.25,
+        hpMul: 1.4 + stage * 0.03,
+        reward: 18,
+      });
+    }
+
+    plan = plan.map((g) => {
+      let hpMul = g.hpMul * diff.hp * stageHp;
+      let speedMul = g.speedMul * diff.speed * stageSpd;
+      let count = Math.max(1, Math.round(g.count * countMul));
+      let reward = g.reward != null ? Math.max(1, Math.round(g.reward * diff.reward)) : undefined;
+      if (g.kind === "boss") {
+        hpMul *= 1 + 0.08 * (stage - 1);
+        if (milestoneBoss) hpMul *= 1.35;
+      }
+      if (milestoneBoss && g.kind !== "boss") {
+        count = Math.max(1, Math.round(count * 1.2));
+      }
+      return { kind: g.kind, count, speedMul, hpMul, reward };
+    });
+
+    return plan;
+  }
+
   function restBeforeWave(nextWave) {
     let rest;
     if (nextWave === 30) rest = 6;
@@ -226,10 +373,12 @@
     else if (nextWave >= 13) rest = 3.5;
     else rest = WAVE_REST_DEFAULT;
     if ([5, 10, 15, 20, 25].includes(nextWave)) rest += 1.5;
+    // 地图阶越高略多喘息
+    rest += Math.min(2, (state.stage - 1) * 0.05);
     return rest;
   }
 
-  // ---------- DOM ----------
+// ---------- DOM ----------
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
   const elLives = document.getElementById("hud-lives");
@@ -250,7 +399,17 @@
   const endMsg = document.getElementById("end-msg");
   const endStats = document.getElementById("end-stats");
   const btnRestart = document.getElementById("btn-restart");
+  const btnMenu = document.getElementById("btn-menu");
   const towerBtns = [...document.querySelectorAll(".tower-btn")];
+  const elLevel = document.getElementById("hud-level");
+  const elDiff = document.getElementById("hud-diff");
+  const startOverlay = document.getElementById("start-overlay");
+  const startDiffBtns = document.getElementById("start-diff-btns");
+  const startLevelInput = document.getElementById("start-level");
+  const startLevelMax = document.getElementById("start-level-max");
+  const startStageHint = document.getElementById("start-stage-hint");
+  const btnStartGame = document.getElementById("btn-start-game");
+  const endActions = document.getElementById("end-actions");
 
   // ---------- 状态 ----------
   let cellSize = 50;
@@ -258,12 +417,16 @@
   let pathLen = 0;
 
   const state = {
-    lives: START_LIVES,
-    gold: START_GOLD,
+    difficulty: "patrol",
+    level: 1,
+    stage: 1,
+    seed: 0,
+    lives: 20,
+    gold: START_GOLD_BASE,
     wave: 0,
     kills: 0,
     spent: 0,
-    phase: "idle",
+    phase: "menu", // menu | idle | countdown | spawning | fighting | won | lost
     countdown: 0,
     buildType: null,
     selected: null,
@@ -276,8 +439,9 @@
     spawnTimer: 0,
     hoverCell: null,
     ended: false,
-    speed: 1, // 1–4；刷新/重开回 1x
-    waveWallStart: null, // 本波首怪出现的 performance.now()（墙钟）
+    speed: 1,
+    waveWallStart: null,
+    sessionKills: 0,
   };
 
   /** 模拟时钟（秒），随倍速推进；慢速/闪白/弹道寿命用它，避免墙钟与倍速错位 */
@@ -303,6 +467,99 @@
       const api = window.CoinpathAudio;
       if (api) api.playShot(style);
     } catch (_) {}
+  }
+
+  function loadSave() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) {
+        return {
+          best: { patrol: 1, hold: 1, blood: 1, abyss: 1 },
+          lastDiff: "patrol",
+          lastLevel: 1,
+        };
+      }
+      const data = JSON.parse(raw);
+      const best = data.best || {};
+      return {
+        best: {
+          patrol: Math.max(1, Math.min(TOTAL_LEVELS, Number(best.patrol) || 1)),
+          hold: Math.max(1, Math.min(TOTAL_LEVELS, Number(best.hold) || 1)),
+          blood: Math.max(1, Math.min(TOTAL_LEVELS, Number(best.blood) || 1)),
+          abyss: Math.max(1, Math.min(TOTAL_LEVELS, Number(best.abyss) || 1)),
+        },
+        lastDiff: DIFFICULTIES[data.lastDiff] ? data.lastDiff : "patrol",
+        lastLevel: Math.max(1, Math.min(TOTAL_LEVELS, Number(data.lastLevel) || 1)),
+      };
+    } catch (_) {
+      return {
+        best: { patrol: 1, hold: 1, blood: 1, abyss: 1 },
+        lastDiff: "patrol",
+        lastLevel: 1,
+      };
+    }
+  }
+
+  function persistSave(patch) {
+    const cur = loadSave();
+    const next = {
+      best: { ...cur.best, ...(patch.best || {}) },
+      lastDiff: patch.lastDiff != null ? patch.lastDiff : cur.lastDiff,
+      lastLevel: patch.lastLevel != null ? patch.lastLevel : cur.lastLevel,
+    };
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(next));
+    } catch (_) {}
+    return next;
+  }
+
+  function maxUnlocked(diffKey) {
+    const save = loadSave();
+    // best = 已通关最高关；可玩到 best+1（封顶 1000）；未通关时 best 记为进度上限
+    const cleared = save.best[diffKey] || 1;
+    // 约定：best 存「最高可达关卡号」（通关 L 后 best=min(1000,L+1)，初始 1）
+    return Math.max(1, Math.min(TOTAL_LEVELS, cleared));
+  }
+
+  function recordLevelClear(diffKey, level) {
+    const save = loadSave();
+    const unlock = Math.min(TOTAL_LEVELS, level + 1);
+    const prev = save.best[diffKey] || 1;
+    const best = Math.max(prev, unlock);
+    persistSave({
+      best: { [diffKey]: best },
+      lastDiff: diffKey,
+      lastLevel: Math.min(TOTAL_LEVELS, level + 1),
+    });
+  }
+
+  function diffDef() {
+    return DIFFICULTIES[state.difficulty] || DIFFICULTIES.patrol;
+  }
+
+  function startingGold() {
+    return START_GOLD_BASE + (diffDef().goldBonus || 0);
+  }
+
+  function startingLives() {
+    return diffDef().lives;
+  }
+
+  function setupLevel(level, diffKey, opts = {}) {
+    const prevStage = state.stage;
+    state.difficulty = diffKey;
+    state.level = level;
+    const built = buildPathForLevel(level, diffKey);
+    state.stage = built.stage;
+    state.seed = built.seed;
+    applyPathCells(built.cells);
+    if (typeof rebuildPathPixels === "function" && cellSize) {
+      rebuildPathPixels();
+    }
+    if (opts.toastMap && built.stage > (opts.prevStage || prevStage)) {
+      toast(`地图升级 · 第 ${built.stage} 阶`, 2600);
+    }
+    return built;
   }
 
   function dist(ax, ay, bx, by) {
@@ -476,7 +733,7 @@
       this.dead = false;
       this.escaped = false;
       this.hitFlash = 0;
-      this.priority = kind === "flyer" ? 2 : kind === "boss" ? 1 : 0;
+      this.priority = kind === "flyer" ? 2 : kind === "blinker" ? 2 : kind === "boss" ? 1 : 0;
 
       if (kind === "fast") {
         this.radius = 0.26;
@@ -498,6 +755,25 @@
         this.radius = 0.24;
         this.color = "#b0bf88";
         this.colorDark = "#5a6b3a";
+      } else if (kind === "splitter") {
+        this.radius = 0.3;
+        this.color = "#c48a5a";
+        this.colorDark = "#6b3e22";
+        this.splitOnDeath = true;
+      } else if (kind === "healer") {
+        this.radius = 0.34;
+        this.color = "#8bc34a";
+        this.colorDark = "#33691e";
+        this.healTimer = 0;
+      } else if (kind === "blinker") {
+        this.radius = 0.26;
+        this.color = "#ce93d8";
+        this.colorDark = "#6a1b9a";
+        this.blinkTimer = 1.5 + Math.random();
+      } else if (kind === "spawn") {
+        this.radius = 0.2;
+        this.color = "#d7a878";
+        this.colorDark = "#8d6e4a";
       } else {
         this.radius = 0.32;
         this.color = "#7cb342";
@@ -602,7 +878,7 @@
     state.spawnQueue = queueWave(n);
     state.spawnTimer = 0.15;
     state.phase = "spawning";
-    state.waveWallStart = null; // 首怪真正出现时再记墙钟
+    state.waveWallStart = null;
     state.buildType = null;
     updateBuildButtons();
     updateHUD();
@@ -610,10 +886,13 @@
     btnNextWave.textContent = `第 ${n} 波进行中…`;
     const hasBoss = state.spawnQueue.some((q) => q.kind === "boss");
     let label = `第 ${n} 波来袭！`;
-    if (n === 30) label = "⚠ 终局 Boss · 第 30 波！";
-    else if (hasBoss) label = `⚠ 第 ${n} 波 · Boss 来袭！`;
+    if (n === WAVES_PER_LEVEL) {
+      label = state.level >= TOTAL_LEVELS
+        ? `⚠ 终局 Boss · 第 ${state.level} 关终章！`
+        : `⚠ 本关终波 Boss · 第 ${n} 波！`;
+    } else if (hasBoss) label = `⚠ 第 ${n} 波 · Boss 来袭！`;
     else if (n === 15 || n === 20 || n === 25) label = `第 ${n} 波 · 小高潮！`;
-    toast(label, hasBoss || n === 30 ? 2400 : 1600);
+    toast(label, hasBoss || n === WAVES_PER_LEVEL ? 2400 : 1600);
     sfx("wave");
   }
 
@@ -643,22 +922,56 @@
     startWave(n);
   }
 
-  /** 速清奖励：墙钟秒结算，不受倍速影响（避免 4x 刷奖励） */
+  /** 速清奖励：按本关内波序号 w 结算墙钟；不受倍速影响 */
   function awardSpeedClearBonus() {
     if (state.waveWallStart == null) return 0;
     const Tclear = (performance.now() - state.waveWallStart) / 1000;
     state.waveWallStart = null;
     const w = state.wave;
     const Tbase = 16 + 2.5 * w;
+    const maxGold = Math.min(48, 36 + Math.floor((state.stage - 1) / 5) * 2);
     const gold = Math.max(
       0,
-      Math.min(36, Math.round((12 * Tbase) / Math.max(Tclear, 0.5)))
+      Math.min(maxGold, Math.round((12 * Tbase) / Math.max(Tclear, 0.5)))
     );
     if (gold > 0) {
       state.gold += gold;
       toast(`速清 +${gold}`, 1800);
     }
     return gold;
+  }
+
+  function clearLevelBoard() {
+    state.towers = [];
+    state.enemies = [];
+    state.projectiles = [];
+    state.particles = [];
+    state.explosions = [];
+    state.spawnQueue = [];
+    state.selected = null;
+    state.buildType = null;
+    selectPanel.classList.add("hidden");
+    buildPanel.classList.remove("hidden");
+  }
+
+  function advanceToNextLevel() {
+    const prevStage = state.stage;
+    const nextLevel = state.level + 1;
+    recordLevelClear(state.difficulty, state.level);
+    clearLevelBoard();
+    setupLevel(nextLevel, state.difficulty, { toastMap: true, prevStage });
+    state.lives = startingLives();
+    state.gold = startingGold();
+    state.wave = 0;
+    state.spent = 0;
+    state.ended = false;
+    state.phase = "idle";
+    btnNextWave.disabled = false;
+    btnNextWave.classList.remove("waiting");
+    btnNextWave.textContent = "开始第 1 波";
+    updateBuildButtons();
+    updateHUD();
+    toast(`进入第 ${nextLevel} 关 · ${diffDef().name}`, 2200);
   }
 
   function checkWaveClear() {
@@ -668,10 +981,14 @@
       state.phase = "fighting";
       return;
     }
-    // 本波全部清完（击杀或漏光）→ 速清奖励；与「提前下一波」并存
     awardSpeedClearBonus();
-    if (state.wave >= TOTAL_WAVES) {
-      winGame();
+    if (state.wave >= WAVES_PER_LEVEL) {
+      if (state.level >= TOTAL_LEVELS) {
+        recordLevelClear(state.difficulty, state.level);
+        winGame();
+        return;
+      }
+      advanceToNextLevel();
       return;
     }
     beginCountdown(state.wave + 1);
@@ -684,10 +1001,6 @@
     state.ended = true;
     sfx("victory");
     showEnd(true);
-    try {
-      const best = Number(localStorage.getItem("coinpath_best_wave") || 0);
-      if (state.wave > best) localStorage.setItem("coinpath_best_wave", String(state.wave));
-    } catch (_) {}
   }
 
   function loseGame() {
@@ -699,23 +1012,38 @@
 
   function showEnd(won) {
     overlay.classList.remove("hidden");
-    endTitle.textContent = won ? "胜利！" : "防线失守";
+    if (startOverlay) startOverlay.classList.add("hidden");
+    endTitle.textContent = won ? "通关！" : "防线失守";
     endTitle.className = won ? "win" : "lose";
     endMsg.textContent = won
-      ? "30 波尽数击退，金币之路得以保全。"
-      : "怪物涌入出口，路卫未能守住。";
+      ? `以「${diffDef().name}」难度肃清全部 ${TOTAL_LEVELS} 关，城防永固。`
+      : `第 ${state.level} 关第 ${state.wave} 波失守。可重开本关或返回选关。`;
     endStats.innerHTML = `
+      <li>难度 <span>${diffDef().name}</span></li>
+      <li>关卡 <span>${state.level}/${TOTAL_LEVELS}</span></li>
+      <li>地图阶 <span>${state.stage}</span></li>
       <li>击杀 <span>${state.kills}</span></li>
       <li>剩余金币 <span>${state.gold}</span></li>
-      <li>到达波次 <span>${state.wave}/${TOTAL_WAVES}</span></li>
+      <li>波次 <span>${state.wave}/${WAVES_PER_LEVEL}</span></li>
       <li>剩余生命 <span>${Math.max(0, state.lives)}</span></li>
     `;
+    if (btnRestart) btnRestart.textContent = won ? "再开新档" : "重开本关";
   }
 
   function resetGame() {
+    if (state.phase === "won") {
+      showStartMenu();
+      return;
+    }
+    beginLevelRun(state.level, state.difficulty);
+  }
+
+  function beginLevelRun(level, diffKey) {
+    clearLevelBoard();
+    setupLevel(level, diffKey);
     Object.assign(state, {
-      lives: START_LIVES,
-      gold: START_GOLD,
+      lives: startingLives(),
+      gold: startingGold(),
       wave: 0,
       kills: 0,
       spent: 0,
@@ -723,12 +1051,6 @@
       countdown: 0,
       buildType: null,
       selected: null,
-      towers: [],
-      enemies: [],
-      projectiles: [],
-      particles: [],
-      explosions: [],
-      spawnQueue: [],
       spawnTimer: 0,
       hoverCell: null,
       ended: false,
@@ -737,6 +1059,7 @@
     });
     gameNow = 0;
     overlay.classList.add("hidden");
+    if (startOverlay) startOverlay.classList.add("hidden");
     selectPanel.classList.add("hidden");
     buildPanel.classList.remove("hidden");
     btnNextWave.disabled = false;
@@ -745,18 +1068,58 @@
     syncSpeedButtons();
     updateBuildButtons();
     updateHUD();
-    toast("新的防线已就位");
+    persistSave({ lastDiff: diffKey, lastLevel: level });
+    toast(`第 ${level} 关 · ${diffDef().name} · 地图阶 ${state.stage}`, 2200);
+  }
+
+  function showStartMenu() {
+    state.phase = "menu";
+    state.ended = false;
+    overlay.classList.add("hidden");
+    if (startOverlay) startOverlay.classList.remove("hidden");
+    refreshStartMenu();
+  }
+
+  let menuDiff = "patrol";
+
+  function refreshStartMenu() {
+    const save = loadSave();
+    if (!DIFFICULTIES[menuDiff]) menuDiff = save.lastDiff;
+    if (startDiffBtns) {
+      startDiffBtns.querySelectorAll("[data-diff]").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.diff === menuDiff);
+      });
+    }
+    const maxLv = maxUnlocked(menuDiff);
+    if (startLevelMax) startLevelMax.textContent = String(maxLv);
+    if (startLevelInput) {
+      startLevelInput.max = String(maxLv);
+      let v = Number(startLevelInput.value) || 1;
+      if (save.lastDiff === menuDiff) v = save.lastLevel || 1;
+      startLevelInput.value = String(Math.max(1, Math.min(maxLv, v)));
+      startLevelInput.min = "1";
+    }
+    const lv = Number(startLevelInput && startLevelInput.value) || 1;
+    const st = mapStage(lv);
+    if (startStageHint) {
+      const d = DIFFICULTIES[menuDiff];
+      startStageHint.textContent =
+        `地图阶 ${st} · 生命 ${d.lives} · 开局金 ${START_GOLD_BASE + d.goldBonus} · 怪血×${d.hp}`;
+    }
   }
 
   // ---------- HUD / UI ----------
   function updateHUD() {
     elLives.textContent = String(Math.max(0, state.lives));
     elGold.textContent = String(state.gold);
-    elWave.textContent = `${state.wave}/${TOTAL_WAVES}`;
+    elWave.textContent = `${state.wave}/${WAVES_PER_LEVEL}`;
+    if (elLevel) elLevel.textContent = `${state.level}/${TOTAL_LEVELS}`;
+    if (elDiff) elDiff.textContent = diffDef().name;
     let status = "准备就绪";
-    if (state.phase === "countdown") status = `休息 ${state.countdown.toFixed(1)}s`;
-    else if (state.phase === "spawning" || state.phase === "fighting") status = "战斗中";
-    else if (state.phase === "won") status = "胜利";
+    if (state.phase === "menu") status = "选关中";
+    else if (state.phase === "countdown") status = `休息 ${state.countdown.toFixed(1)}s`;
+    else if (state.phase === "spawning" || state.phase === "fighting") status = `阶${state.stage} · 战斗`;
+    else if (state.phase === "won") status = "通关";
     else if (state.phase === "lost") status = "失败";
     else if (state.phase === "idle") status = "点击下方开始";
     elStatus.textContent = status;
@@ -961,6 +1324,35 @@
     resetGame();
   });
 
+  if (btnMenu) {
+    btnMenu.addEventListener("click", () => {
+      sfx("click");
+      showStartMenu();
+    });
+  }
+
+  if (startDiffBtns) {
+    startDiffBtns.addEventListener("click", (ev) => {
+      const btn = ev.target.closest("[data-diff]");
+      if (!btn) return;
+      sfx("click");
+      menuDiff = btn.dataset.diff;
+      refreshStartMenu();
+    });
+  }
+  if (startLevelInput) {
+    startLevelInput.addEventListener("input", () => refreshStartMenu());
+  }
+  if (btnStartGame) {
+    btnStartGame.addEventListener("click", () => {
+      sfx("click");
+      const maxLv = maxUnlocked(menuDiff);
+      let lv = Number(startLevelInput && startLevelInput.value) || 1;
+      lv = Math.max(1, Math.min(maxLv, Math.floor(lv)));
+      beginLevelRun(lv, menuDiff);
+    });
+  }
+
   document.getElementById("speed-btns").addEventListener("click", (ev) => {
     const btn = ev.target.closest(".speed-btn");
     if (!btn) return;
@@ -988,7 +1380,21 @@
     return best;
   }
 
-  function damageEnemy(e, amount, now, style, isSplash) {
+  function spawnSplitlings(parent) {
+    const baseHpMul = Math.max(0.2, (parent.maxHp / BASE_HP) * 0.35);
+    for (let i = 0; i < 2; i++) {
+      const child = new Enemy("spawn", 1.15, baseHpMul, Math.max(1, Math.round(parent.reward * 0.25)));
+      child.progress = Math.max(0, parent.progress - cellSize * 0.15 * (i + 1));
+      const p = posOnPath(child.progress);
+      child.x = p.x;
+      child.y = p.y;
+      child.angle = p.angle;
+      child.baseSpeed = BASE_SPEED * 1.15 * cellSize;
+      state.enemies.push(child);
+    }
+  }
+
+    function damageEnemy(e, amount, now, style, isSplash) {
     if (e.dead) return;
     const dmg = e.mitigate(amount, style, !!isSplash);
     e.hp -= dmg;
@@ -1001,6 +1407,9 @@
       const n = e.kind === "boss" ? 14 : e.kind === "tank" ? 10 : 7;
       spawnParticle(e.x, e.y, e.color, n);
       sfx("death", e.kind);
+      if (e.splitOnDeath || e.kind === "splitter") {
+        spawnSplitlings(e);
+      }
     } else {
       sfx("hit");
     }
@@ -1035,7 +1444,7 @@
   }
 
   function update(dt, now) {
-    if (state.ended) return;
+    if (state.ended || state.phase === "menu") return;
 
     if (state.phase === "countdown") {
       const prevCountdown = state.countdown;
@@ -1063,7 +1472,7 @@
             new Enemy(spec.kind, spec.speedMul, spec.hpMul, spec.reward)
           );
           // 终局重叠出场：Boss 后极短间隔
-          if (state.wave === 30) {
+          if (state.wave === WAVES_PER_LEVEL) {
             state.spawnTimer = spec.kind === "boss" ? 0.2 : 0.28;
           } else {
             state.spawnTimer = spec.kind === "boss" ? 0.35 : 0.55;
@@ -1090,11 +1499,36 @@
         updateHUD();
         continue;
       }
-      const p = posOnPath(e.progress);
+      // 闪现贼：周期性沿路径前窜
+      if (e.kind === "blinker") {
+        e.blinkTimer = (e.blinkTimer || 0) - dt;
+        if (e.blinkTimer <= 0) {
+          e.progress += cellSize * (1.2 + Math.random() * 0.6);
+          e.blinkTimer = 2.2 + Math.random() * 1.2;
+          spawnParticle(e.x, e.y, "#ce93d8", 5);
+        }
+      }
+      const p = posOnPath(Math.min(e.progress, pathLen - 0.01));
       e.x = p.x;
       e.y = p.y;
       e.angle = p.angle;
       if (now >= e.slowUntil) e.slowMul = 1;
+
+      // 治疗虫：附近友军回血
+      if (e.kind === "healer") {
+        e.healTimer = (e.healTimer || 0) - dt;
+        if (e.healTimer <= 0) {
+          e.healTimer = 2.0;
+          const range = cellSize * 1.8;
+          for (const ally of state.enemies) {
+            if (ally.dead || ally.escaped || ally === e) continue;
+            if (dist(e.x, e.y, ally.x, ally.y) <= range) {
+              ally.hp = Math.min(ally.maxHp, ally.hp + Math.max(4, Math.round(ally.maxHp * 0.04)));
+            }
+          }
+          spawnParticle(e.x, e.y, "#aed581", 4);
+        }
+      }
     }
 
     state.enemies = state.enemies.filter((e) => !e.dead && !e.escaped);
@@ -1159,10 +1593,11 @@
     ctx.clearRect(0, 0, w, h);
 
     // 城堡夜景底：暖石色天幕
+    const stageFog = Math.min(0.55, (state.stage - 1) * 0.03);
     const sky = ctx.createLinearGradient(0, 0, 0, h);
-    sky.addColorStop(0, "#1e1a14");
-    sky.addColorStop(0.5, "#16120e");
-    sky.addColorStop(1, "#10140e");
+    sky.addColorStop(0, `rgb(${30 - stageFog * 20},${26 - stageFog * 18},${20 - stageFog * 10})`);
+    sky.addColorStop(0.5, `rgb(${22 - stageFog * 16},${18 - stageFog * 14},${14 - stageFog * 8})`);
+    sky.addColorStop(1, `rgb(${16 - stageFog * 10},${20 - stageFog * 8},${14 - stageFog * 6})`);
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, w, h);
 
@@ -1772,6 +2207,10 @@
     else if (e.kind === "boss") drawEnemyBoss(e, rad, flash, slowed, now);
     else if (e.kind === "shield") drawEnemyShield(e, rad, flash, slowed);
     else if (e.kind === "flyer") drawEnemyFlyer(e, rad, flash, slowed);
+    else if (e.kind === "splitter") drawEnemySplitter(e, rad, flash, slowed);
+    else if (e.kind === "healer") drawEnemyHealer(e, rad, flash, slowed);
+    else if (e.kind === "blinker") drawEnemyBlinker(e, rad, flash, slowed);
+    else if (e.kind === "spawn") drawEnemySpawn(e, rad, flash, slowed);
     else drawEnemyNormal(e, rad, flash, slowed);
 
     ctx.restore();
@@ -2046,7 +2485,86 @@
     ctx.stroke();
   }
 
-  function drawEnemyHpBar(e, rad) {
+  function drawEnemySplitter(e, rad, flash, slow) {
+    const fill = bodyFill(e.color, flash, slow, e.kind);
+    ctx.beginPath();
+    ctx.moveTo(rad * 0.9, 0);
+    ctx.lineTo(rad * 0.2, -rad * 0.85);
+    ctx.lineTo(-rad * 0.55, -rad * 0.5);
+    ctx.lineTo(-rad * 0.7, rad * 0.35);
+    ctx.lineTo(rad * 0.15, rad * 0.8);
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = e.colorDark;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.fillStyle = flash ? "#333" : "#4e342e";
+    ctx.beginPath();
+    ctx.arc(rad * 0.35, -rad * 0.15, rad * 0.12, 0, Math.PI * 2);
+    ctx.fill();
+    // 腹部分裂纹
+    ctx.strokeStyle = "rgba(80,40,20,0.55)";
+    ctx.beginPath();
+    ctx.moveTo(-rad * 0.1, -rad * 0.2);
+    ctx.lineTo(rad * 0.1, rad * 0.35);
+    ctx.stroke();
+  }
+
+  function drawEnemyHealer(e, rad, flash, slow) {
+    const fill = bodyFill(e.color, flash, slow, e.kind);
+    ctx.beginPath();
+    ctx.arc(0, 0, rad * 0.85, 0, Math.PI * 2);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = e.colorDark;
+    ctx.lineWidth = 1.3;
+    ctx.stroke();
+    ctx.fillStyle = flash ? "#fff" : "#dcedc8";
+    ctx.fillRect(-rad * 0.12, -rad * 0.45, rad * 0.24, rad * 0.9);
+    ctx.fillRect(-rad * 0.4, -rad * 0.12, rad * 0.8, rad * 0.24);
+    ctx.beginPath();
+    ctx.arc(0, 0, rad * 1.05, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(174,213,129,0.45)";
+    ctx.stroke();
+  }
+
+  function drawEnemyBlinker(e, rad, flash, slow) {
+    const fill = bodyFill(e.color, flash, slow, e.kind);
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rad * 0.9, rad * 0.55, 0, 0, Math.PI * 2);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = e.colorDark;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.fillStyle = flash ? "#fff" : "#f3e5f5";
+    ctx.beginPath();
+    ctx.arc(rad * 0.35, -rad * 0.05, rad * 0.16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(206,147,216,0.7)";
+    ctx.setLineDash([2, 3]);
+    ctx.beginPath();
+    ctx.moveTo(-rad * 1.1, 0);
+    ctx.lineTo(-rad * 0.5, 0);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+  }
+
+  function drawEnemySpawn(e, rad, flash, slow) {
+    const fill = bodyFill(e.color, flash, slow, e.kind);
+    ctx.beginPath();
+    ctx.arc(0, 0, rad * 0.85, 0, Math.PI * 2);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = e.colorDark;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+    function drawEnemyHpBar(e, rad) {
     const bw = Math.max(rad * 2.4, 16);
     const bh = e.kind === "boss" ? 5 : 4;
     const bx = e.x - bw / 2;
@@ -2091,21 +2609,33 @@
     window.visualViewport.addEventListener("resize", resize);
   }
   requestAnimationFrame(() => requestAnimationFrame(resize));
+  const save0 = loadSave();
+  menuDiff = save0.lastDiff;
+  setupLevel(save0.lastLevel || 1, menuDiff);
   resize();
   updateHUD();
+  showStartMenu();
   requestAnimationFrame(frame);
 
   window.__COINPATH__ = {
     state,
     TOWER_DEFS,
-    PATH_CELLS,
+    DIFFICULTIES,
+    get PATH_CELLS() { return PATH_CELLS; },
     startWave,
     resetGame,
+    beginLevelRun,
+    showStartMenu,
     canPlace,
     towerStats,
     upgradeCost,
     wavePlan,
-    TOTAL_WAVES,
+    baseWavePlan,
+    mapStage,
+    hashSeed,
+    buildPathForLevel,
+    TOTAL_LEVELS,
+    WAVES_PER_LEVEL,
     restBeforeWave,
     setGameSpeed,
     awardSpeedClearBonus,
