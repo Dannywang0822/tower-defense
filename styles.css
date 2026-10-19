@@ -69,9 +69,8 @@ html, body {
 #hud {
   flex: 0 0 auto;
   display: flex;
-  flex-wrap: nowrap;
-  gap: 4px 8px;
-  align-items: center;
+  flex-direction: column;
+  gap: 4px;
   min-width: 0;
   max-width: 100%;
   background: linear-gradient(180deg, rgba(48, 40, 28, 0.96) 0%, rgba(28, 24, 18, 0.94) 100%);
@@ -85,35 +84,51 @@ html, body {
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
+.hud-stats {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px 6px;
+  align-items: center;
+  min-width: 0;
+  width: 100%;
+}
 .hud-item {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   white-space: nowrap;
-  padding: 3px 8px;
+  padding: 2px 7px;
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.28);
   border: 1px solid rgba(212, 175, 85, 0.12);
+  flex: 0 0 auto;
 }
 .hud-item[title="生命"] { color: #ef9a9a; }
 .hud-item[title="金币"] { color: var(--gold); }
 .hud-item[title="波次"] { color: #aed581; }
-.hud-icon { font-size: 12px; opacity: 0.95; line-height: 1; }
+.hud-icon { font-size: 11px; opacity: 0.95; line-height: 1; }
 .hud-status {
   margin-left: auto;
   color: var(--muted);
   font-weight: 500;
-  font-size: 12px;
+  font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 28%;
+  max-width: none;
   min-width: 0;
   flex: 1 1 auto;
-  padding: 3px 8px;
+  padding: 2px 6px;
   background: transparent;
   border: none;
 }
-.hud-tools { display: contents; }
+.hud-tools {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+}
 .hud-audio {
   appearance: none;
   -webkit-appearance: none;
@@ -123,9 +138,9 @@ html, body {
   color: var(--accent);
   font: inherit;
   font-weight: 700;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1;
-  padding: 4px 8px;
+  padding: 4px 7px;
   border-radius: 999px;
   cursor: pointer;
   min-height: 26px;
@@ -139,52 +154,71 @@ html, body {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.hud-speed {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+.hud-chip {
+  appearance: none;
+  -webkit-appearance: none;
   flex: 0 0 auto;
-  padding: 2px 4px 2px 6px;
-  border-radius: 999px;
+  border: 1px solid rgba(212, 175, 85, 0.4);
   background: rgba(0, 0, 0, 0.28);
-  border: 1px solid rgba(212, 175, 85, 0.12);
-}
-.speed-label {
+  color: var(--accent);
+  font: inherit;
+  font-weight: 700;
   font-size: 11px;
-  color: var(--muted);
-  font-weight: 600;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  min-height: 26px;
   white-space: nowrap;
 }
-.speed-btns {
-  display: flex;
-  gap: 2px;
+.hud-chip.ghost {
+  color: var(--muted);
+  border-color: rgba(168, 152, 120, 0.4);
+}
+.hud-chip[aria-pressed="true"] {
+  color: #1a140c;
+  background: linear-gradient(135deg, #c9a227, #e8d48b);
+  border-color: #e8d48b;
+}
+.hud-chip:hover { filter: brightness(1.08); }
+.speed-seg {
+  display: inline-flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 168px;
+  align-items: stretch;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(212, 175, 85, 0.28);
+  background: rgba(0, 0, 0, 0.35);
 }
 .speed-btn {
-  min-width: 32px;
-  min-height: 28px;
-  padding: 2px 6px;
-  border-radius: 999px;
-  border: 1px solid transparent;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 26px;
+  padding: 2px 0;
+  border: none;
+  border-right: 1px solid rgba(212, 175, 85, 0.18);
+  border-radius: 0;
   background: transparent;
   color: var(--muted);
   font: inherit;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  transition: background 0.12s, color 0.12s;
 }
-.speed-btn:hover {
-  color: var(--text);
-  border-color: rgba(212, 175, 85, 0.35);
-}
+.speed-btn:last-child { border-right: none; }
+.speed-btn:hover { color: var(--text); background: rgba(212, 175, 85, 0.12); }
 .speed-btn.active {
   color: #1a140c;
   background: linear-gradient(135deg, #c9a227, #e8d48b);
-  border-color: #e8d48b;
-  box-shadow: 0 0 8px rgba(201, 162, 39, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
 }
+.hud-speed, .speed-label, .speed-btns { display: none !important; }
+
 #stage-wrap {
   position: relative;
   flex: 1 1 auto;
@@ -437,7 +471,8 @@ html, body {
   .tb-desc { font-size: 9px; }
   .action-btn { font-size: 12px; padding: 6px 8px; }
   .hud-status { font-size: 11px; }
-  .hud-audio { font-size: 11px; padding: 3px 7px; min-height: 22px; }
+  .hud-audio, .hud-chip { font-size: 11px; padding: 3px 7px; min-height: 22px; }
+  .speed-btn { min-height: 24px; }
 }
 
 @media (max-height: 640px) {
@@ -451,50 +486,46 @@ html, body {
   .hint { display: none; }
   .tb-desc { display: none; }
   .panel-title { display: none; }
-  .speed-label { display: none; }
-  .speed-btn { min-width: 28px; min-height: 26px; font-size: 11px; padding: 2px 4px; }
-  .hud-status { max-width: 22%; }
-  .hud-audio { font-size: 10px; padding: 2px 6px; min-height: 20px; }
+  .speed-btn { min-height: 22px; font-size: 10px; }
+  .hud-chip, .hud-audio { font-size: 10px; padding: 2px 6px; min-height: 22px; }
+  .speed-seg { max-width: 140px; }
 }
 
 @media (max-width: 460px) {
   #hud { gap: 3px; padding-left: 6px; padding-right: 6px; }
   .hud-item { flex-shrink: 0; padding: 2px 5px; gap: 3px; }
-  .hud-status { flex: 1 1 auto; flex-shrink: 1; min-width: 0; }
-  .speed-label { display: none; }
-  .hud-speed { padding: 1px 2px; gap: 0; }
-  .speed-btns { gap: 1px; }
-  .speed-btn { min-width: 22px; min-height: 24px; font-size: 10px; padding: 1px 2px; }
-  .hud-status { max-width: none; font-size: 10px; padding: 2px 3px; }
-  .hud-audio { font-size: 10px; padding: 2px 6px; min-height: 22px; }
+  .hud-status { font-size: 10px; padding: 2px 3px; }
+  .speed-seg { max-width: 128px; }
+  .speed-btn { min-height: 24px; font-size: 10px; }
+  .hud-chip, .hud-audio { font-size: 10px; padding: 2px 6px; min-height: 22px; }
 }
 
-@media (max-width: 400px) {
-  #hud { flex-wrap: wrap; row-gap: 4px; }
-  .hud-status {
-    order: 2;
-    flex: 1 1 auto;
-    min-width: 3.2em;
-    max-width: none;
-  }
-  .hud-tools {
-    display: flex;
-    flex: 1 0 100%;
-    order: 3;
-    align-items: center;
-    justify-content: space-between;
-    gap: 6px;
-  }
-  .speed-btn { min-width: 28px; min-height: 26px; font-size: 11px; padding: 2px 4px; }
+@media (max-width: 360px) {
+  #btn-hud-menu { display: none; }
+  .speed-seg { max-width: 120px; }
 }
 
-@container game (max-width: 520px) {
-  .speed-label { display: none; }
-  .hud-speed { padding: 2px 3px; gap: 2px; }
-  .speed-btn { min-width: 26px; min-height: 26px; font-size: 11px; padding: 2px 4px; }
-  .hud-status { max-width: none; }
-}
 
+
+/* ---- v13 暂停 ---- */
+#pause-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 8, 6, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 55;
+  padding: 16px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+#pause-overlay.hidden { display: none; }
+.pause-card h2 {
+  color: var(--gold);
+  text-shadow: 0 0 18px rgba(212, 175, 85, 0.35);
+}
+.pause-msg { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
 
 /* ---- v12 选关 / 难度 ---- */
 #start-overlay {
