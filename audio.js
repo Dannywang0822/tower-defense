@@ -27,6 +27,7 @@
   let pulseGen = 0;
   let bgmDuck = null;
   let chapterId = "dust";
+  let playingId = "";
   let pausedDuck = false;
   let musicGen = 0;
   let musicOn = false;
@@ -413,13 +414,24 @@
   function stopMusic() {
     musicGen++;
     musicOn = false;
+    playingId = "";
     if (pumpTimer) {
       clearTimeout(pumpTimer);
       pumpTimer = null;
     }
+    // 换掉整条 BGM 总线。已经排进未来的音符若 stop() 失败（开始时间还在后面），
+    // 旧节点仍挂在被断开的 gain 上，听不见。
+    if (ctx && bgmBus) {
+      if (bgmDuck) {
+        try { bgmDuck.disconnect(); } catch (_) {}
+      }
+      bgmDuck = ctx.createGain();
+      bgmDuck.gain.value = pausedDuck ? 0.0001 : 1;
+      bgmDuck.connect(bgmBus);
+    }
     for (const item of bgmNodes) {
-      try { item.node.stop(); } catch (_) {}
       try { item.node.disconnect(); } catch (_) {}
+      try { item.node.stop(0); } catch (_) {}
     }
     bgmNodes = [];
     nextAt = 0;
@@ -473,8 +485,9 @@
     const id = TRACKS[chapterId] ? chapterId : "dust";
     chapterId = id;
     stopMusic();
-    if (!ctx || !bgmDuck || muted) return;
+    if (!ctx || !bgmDuck || muted || !gestureSeen) return;
     musicOn = true;
+    playingId = id;
     const gen = musicGen;
     nextAt = 0;
     startWind(TRACKS[id]);
@@ -493,9 +506,11 @@
 
   function setChapter(id) {
     const next = TRACKS[id] ? id : "dust";
-    if (next === chapterId && musicOn) return;
     chapterId = next;
+    // 曲目 id 变了就必须停掉上一首再开新循环。
+    // 只比较「正在响的 playingId」：手势之前记住的 chapterId 不能当成已经在播。
     if (!ctx || muted || !gestureSeen) return;
+    if (playingId === next && musicOn) return;
     try { restartChapterMusic(); } catch (_) {}
   }
 
@@ -878,6 +893,7 @@
     playShot,
     toggle,
     setChapter,
+    currentTrack() { return playingId || chapterId; },
     setPaused: setBgmPaused,
     trackSeconds(id) {
       const t = TRACKS[id];

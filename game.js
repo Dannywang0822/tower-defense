@@ -1717,6 +1717,7 @@
 
   function showStartMenu() {
     state.phase = "menu";
+    menuTrackSource = "chapter";
     seedMenuLevel = true;
     state.ended = false;
     state.paused = false;
@@ -1790,6 +1791,9 @@
   let menuDiff = "patrol";
   let menuMap = 0;
   let seedMenuLevel = true;
+  // 选关时最近一次改的是关卡还是地图皮肤。地图皮肤各自对应一条章节曲。
+  let menuTrackSource = "chapter";
+  const SKIN_TRACKS = ["dust", "night", "frost", "rift", "dust"];
 
   function refreshStartMenu() {
     const save = loadSave();
@@ -1821,7 +1825,8 @@
     const lv = Number(startLevelInput && startLevelInput.value) || 1;
     const st = mapStage(lv);
     const ch = chapterForStage(st);
-    if (document.body) document.body.dataset.chapter = ch.id;
+    state.mapIndex = menuMap;
+    if (document.body) document.body.dataset.chapter = activeChapter().id;
     if (startStageHint) {
       const d = DIFFICULTIES[menuDiff];
       const skin = SCENE_SKINS[menuMap] || SCENE_SKINS[0];
@@ -1833,15 +1838,33 @@
     syncAudio();
   }
 
+  function menuLevel() {
+    const lv = Number(startLevelInput && startLevelInput.value) || state.level || 1;
+    return Math.max(1, Math.floor(lv));
+  }
+
+  function activeStage() {
+    if (state.pendingStart && state.pendingStart.level) return mapStage(state.pendingStart.level);
+    if (state.phase === "menu") return mapStage(menuLevel());
+    return state.stage || 1;
+  }
+
+  function resolveBgmTrack() {
+    if (state.phase === "menu" && !state.pendingStart && menuTrackSource === "map") {
+      return SKIN_TRACKS[menuMap] || "dust";
+    }
+    return chapterForStage(activeStage()).track;
+  }
+
+  function activeChapter() {
+    const id = resolveBgmTrack();
+    return CHAPTERS.find((c) => c.id === id) || chapterForStage(activeStage());
+  }
+
   function syncAudio() {
     const api = window.CoinpathAudio;
     if (!api) return;
-    let stage = state.stage || 1;
-    if (state.phase === "menu") {
-      const lv = Number(startLevelInput && startLevelInput.value) || state.level || 1;
-      stage = mapStage(lv);
-    }
-    const ch = chapterForStage(stage);
+    const ch = activeChapter();
     if (document.body) document.body.dataset.chapter = ch.id;
     try {
       if (api.setChapter) api.setChapter(ch.track);
@@ -2326,6 +2349,7 @@
     if (startOverlay) startOverlay.classList.add("hidden");
     if (overlay) overlay.classList.add("hidden");
     if (skillPickOverlay) skillPickOverlay.classList.remove("hidden");
+    syncAudio();
   }
 
   function toggleSkillPick(id, btn) {
@@ -2678,8 +2702,80 @@
   }
 
   // ---------- 输入 ----------
+  let shopSuppressUntil = 0;
+
   function cancelDrag() {
+    const d = state.drag;
     state.drag = null;
+    if (d && d.captureEl && d.pid != null) {
+      try { d.captureEl.releasePointerCapture(d.pid); } catch (_) {}
+    }
+  }
+
+  function tryPlaceTower(type, c, r) {
+    if (!type || !TOWER_DEFS[type]) return false;
+    if (state.ended || state.paused || state.phase === "menu") {
+      toast("现在不能建造");
+      return false;
+    }
+    if (c < 0 || r < 0 || c >= COLS || r >= ROWS || !canPlace(c, r)) {
+      toast(isPath(c, r) ? "路径上不能建塔" : "此处无法建造");
+      return false;
+    }
+    const cost = TOWER_DEFS[type].cost;
+    if (state.gold < cost) {
+      toast("金币不足");
+      return false;
+    }
+    state.gold -= cost;
+    state.spent += cost;
+    const tower = new Tower(type, c, r);
+    state.towers.push(tower);
+    spawnParticle(tower.x, tower.y, tower.color, 8);
+    sfx("build", type);
+    selectTower(tower);
+    toast(`建造 ${tower.name}`);
+    state.buildType = null;
+    updateHUD();
+    return true;
+  }
+
+  function updateBuildDrag(e) {
+    const d = state.drag;
+    if (!d || !d.build) return;
+    if (d.pid != null && e.pointerId != null && d.pid !== e.pointerId) return;
+    const pt = pointerToCell(e);
+    d.x = pt.x;
+    d.y = pt.y;
+    state.hoverCell = { c: pt.c, r: pt.r };
+    if (!d.moved && Math.hypot(e.clientX - d.ox, e.clientY - d.oy) > 8) {
+      d.moved = true;
+      state.buildType = null;
+      updateBuildButtons();
+    }
+  }
+
+  function finishBuildDrag(e) {
+    const d = state.drag;
+    if (!d || !d.build) return;
+    if (d.pid != null && e.pointerId != null && d.pid !== e.pointerId) return;
+    state.drag = null;
+    if (d.captureEl && d.pid != null) {
+      try { d.captureEl.releasePointerCapture(d.pid); } catch (_) {}
+    }
+    if (!d.moved) return;
+    shopSuppressUntil = performance.now() + 350;
+    const rect = canvas.getBoundingClientRect();
+    const inside = e.clientX >= rect.left && e.clientX <= rect.right
+      && e.clientY >= rect.top && e.clientY <= rect.bottom;
+    if (!inside) {
+      toast("已取消建造");
+      state.buildType = null;
+      updateBuildButtons();
+      return;
+    }
+    const pt = pointerToCell(e);
+    tryPlaceTower(d.build, pt.c, pt.r);
   }
 
   function pointerToCell(e) {
@@ -2733,24 +2829,7 @@
       return;
     }
     if (state.buildType) {
-      if (!canPlace(c, r)) {
-        toast(isPath(c, r) ? "路径上不能建塔" : "此处无法建造");
-        return;
-      }
-      const cost = TOWER_DEFS[state.buildType].cost;
-      if (state.gold < cost) {
-        toast("金币不足");
-        return;
-      }
-      state.gold -= cost;
-      state.spent += cost;
-      const tower = new Tower(state.buildType, c, r);
-      state.towers.push(tower);
-      spawnParticle(tower.x, tower.y, tower.color, 8);
-      sfx("build", tower.type);
-      selectTower(tower);
-      toast(`建造 ${tower.name}`);
-      updateHUD();
+      tryPlaceTower(state.buildType, c, r);
       return;
     }
     deselect();
@@ -2760,7 +2839,11 @@
     const { c, r, x, y } = pointerToCell(e);
     state.hoverCell = { c, r };
     const d = state.drag;
-    if (d) {
+    if (d && d.build) {
+      updateBuildDrag(e);
+      return;
+    }
+    if (d && d.tower) {
       d.x = x;
       d.y = y;
       if (!d.moved && dist(x, y, d.sx, d.sy) > cellSize * 0.35) {
@@ -2774,6 +2857,10 @@
   function onPointerUp(e) {
     const d = state.drag;
     if (!d) return;
+    if (d.build) {
+      finishBuildDrag(e);
+      return;
+    }
     // 忽略其它触点结束，避免多指误清
     if (d.pid != null && e.pointerId != null && d.pid !== e.pointerId) return;
     state.drag = null;
@@ -2812,10 +2899,24 @@
   canvas.addEventListener("pointermove", onPointerMove);
   canvas.addEventListener("pointerup", onPointerUp);
   canvas.addEventListener("pointercancel", (e) => {
-    cancelDrag();
+    if (state.drag && state.drag.tower) cancelDrag();
     try { if (e && e.pointerId != null) canvas.releasePointerCapture(e.pointerId); } catch (_) {}
   });
-  canvas.addEventListener("lostpointercapture", () => { cancelDrag(); });
+  canvas.addEventListener("lostpointercapture", () => {
+    if (state.drag && state.drag.tower) cancelDrag();
+  });
+  window.addEventListener("pointermove", (e) => {
+    if (state.drag && state.drag.build) updateBuildDrag(e);
+  });
+  window.addEventListener("pointerup", (e) => {
+    if (state.drag && state.drag.build) finishBuildDrag(e);
+  });
+  window.addEventListener("pointercancel", () => {
+    if (state.drag && state.drag.build) {
+      if (state.drag.moved) shopSuppressUntil = performance.now() + 350;
+      cancelDrag();
+    }
+  });
   window.addEventListener("blur", () => { cancelDrag(); });
   canvas.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
   const stage = document.getElementById("stage-wrap");
@@ -2825,18 +2926,51 @@
   document.addEventListener("dblclick", (e) => e.preventDefault(), { passive: false });
 
   towerBtns.forEach((btn) => {
+    btn.addEventListener("pointerdown", (e) => {
+      if (e.button != null && e.button !== 0) return;
+      if (state.ended || state.paused || state.phase === "menu") return;
+      const type = btn.dataset.type;
+      if (!type || !TOWER_DEFS[type]) return;
+      const pt = pointerToCell(e);
+      state.drag = {
+        build: type,
+        ox: e.clientX,
+        oy: e.clientY,
+        x: pt.x,
+        y: pt.y,
+        moved: false,
+        pid: e.pointerId,
+        captureEl: btn,
+      };
+      try { btn.setPointerCapture(e.pointerId); } catch (_) {}
+    });
+    btn.addEventListener("pointermove", (e) => {
+      if (!state.drag || !state.drag.build || state.drag.captureEl !== btn) return;
+      updateBuildDrag(e);
+    });
+    btn.addEventListener("pointerup", (e) => {
+      if (!state.drag || !state.drag.build || state.drag.captureEl !== btn) return;
+      finishBuildDrag(e);
+    });
+    btn.addEventListener("pointercancel", () => {
+      if (state.drag && state.drag.build && state.drag.moved) shopSuppressUntil = performance.now() + 350;
+      if (state.drag && state.drag.build) cancelDrag();
+    });
     btn.addEventListener("click", () => {
+      if (performance.now() < shopSuppressUntil) return;
       sfx("click");
-      if (state.ended || state.paused) return;
+      if (state.ended || state.paused || state.phase === "menu") return;
       const type = btn.dataset.type;
       if (state.gold < TOWER_DEFS[type].cost) {
         toast("金币不足");
+        state.buildType = null;
+        updateBuildButtons();
         return;
       }
       deselect();
       state.buildType = state.buildType === type ? null : type;
       updateBuildButtons();
-      if (state.buildType) toast(`选择放置：${TOWER_DEFS[type].name}`);
+      if (state.buildType) toast(`轻点空地放置 ${TOWER_DEFS[type].name}，或按住按钮拖过去`, 1800);
     });
   });
 
@@ -2937,11 +3071,15 @@
       if (!btn) return;
       sfx("click");
       menuMap = Number(btn.dataset.map) | 0;
+      menuTrackSource = "map";
       refreshStartMenu();
     });
   }
   if (startLevelInput) {
-    startLevelInput.addEventListener("input", () => refreshStartMenu());
+    startLevelInput.addEventListener("input", () => {
+      menuTrackSource = "chapter";
+      refreshStartMenu();
+    });
   }
   if (btnStartGame) {
     btnStartGame.addEventListener("click", () => {
@@ -3644,7 +3782,7 @@
     }
 
     drawSceneWash(skin, w, h);
-    const chapter = chapterForStage(state.stage || 1);
+    const chapter = activeChapter();
     if (chapter.fog) {
       ctx.fillStyle = chapter.fog;
       ctx.fillRect(0, 0, w, h);
@@ -3661,13 +3799,18 @@
     drawZombieSpawn(entry.x, entry.y, now);
     drawCastleGate(exit.x, exit.y, now);
 
-    // 放置预览
-    if (state.buildType && state.hoverCell) {
-      const { c, r } = state.hoverCell;
+    // 放置预览（轻点预选，或从建造按钮拖出来）
+    const buildGhost = state.drag && state.drag.build && state.drag.moved ? state.drag.build : null;
+    const buildPreview = buildGhost || state.buildType;
+    const previewCell = buildGhost
+      ? { c: Math.floor(state.drag.x / cellSize), r: Math.floor(state.drag.y / cellSize) }
+      : state.hoverCell;
+    if (buildPreview && previewCell) {
+      const { c, r } = previewCell;
       if (c >= 0 && r >= 0 && c < COLS && r < ROWS) {
-        const ok = canPlace(c, r);
+        const ok = canPlace(c, r) && state.gold >= TOWER_DEFS[buildPreview].cost;
         const p = cellCenter(c, r);
-        const def = TOWER_DEFS[state.buildType];
+        const def = TOWER_DEFS[buildPreview];
         ctx.fillStyle = ok ? "rgba(212,175,85,0.22)" : "rgba(229,115,115,0.28)";
         ctx.fillRect(c * cellSize + 2, r * cellSize + 2, cellSize - 4, cellSize - 4);
         ctx.strokeStyle = ok ? "rgba(212,175,85,0.9)" : "rgba(229,115,115,0.9)";
@@ -3683,6 +3826,21 @@
         ctx.stroke();
         ctx.setLineDash([]);
       }
+    }
+    if (buildGhost) {
+      const d = state.drag;
+      const ghost = {
+        type: buildGhost,
+        level: 1,
+        star: 1,
+        evo: null,
+        branch: null,
+        angle: -Math.PI / 2,
+        silencedUntil: 0,
+        x: d.x,
+        y: d.y - cellSize * 0.12,
+      };
+      drawTower(ghost, cellSize, 0.78);
     }
 
     if (state.selected) {
