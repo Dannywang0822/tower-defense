@@ -952,6 +952,7 @@
       this.star = opts.star != null ? opts.star : 1;
       this.branch = opts.branch || null;
       this.invested = opts.invested != null ? opts.invested : TOWER_DEFS[type].cost;
+      this.mergePips = opts.mergePips != null ? opts.mergePips : 0;
       const p = cellCenter(c, r);
       this.x = p.x;
       this.y = p.y;
@@ -1453,6 +1454,7 @@
       return;
     }
     state.paused = !!on;
+    if (state.paused) cancelDrag();
     if (pauseOverlay) pauseOverlay.classList.toggle("hidden", !state.paused);
     if (btnPause) {
       btnPause.setAttribute("aria-pressed", state.paused ? "true" : "false");
@@ -1582,6 +1584,107 @@
   function cancelSkillAim() {
     state.skillAim = null;
     updateSkillButtons();
+  }
+
+  function mergeBlockReason(src, dst) {
+    if (!src || !dst || src === dst) return "无效目标";
+    if (src.type !== dst.type) return "需同种塔";
+    if ((src.star || 1) !== (dst.star || 1)) return "需同星级";
+    if (dst.star >= 3) return "已满 3 星";
+    if (src.level < MERGE_MIN_LEVEL || dst.level < MERGE_MIN_LEVEL) {
+      return `双方需 Lv≥${MERGE_MIN_LEVEL}`;
+    }
+    return "";
+  }
+
+  function canMergeCandidate(anchor, t) {
+    return !mergeBlockReason(t, anchor);
+  }
+
+  function countMergePartners(anchor) {
+    if (!anchor) return 0;
+    return state.towers.filter((t) => t !== anchor && canMergeCandidate(anchor, t)).length;
+  }
+
+  function enterMergeMode() {
+    toast("按住塔拖到另一座同种同星塔上即可合成", 2000);
+  }
+
+  /** 拖拽合成：3 合 1。每次喂入 +1 进度，进度满 2（=3 座）升星 */
+  function feedMerge(target, src) {
+    const pips = (target.mergePips || 0) + (src.mergePips || 0) + 1;
+    const invested = target.invested + src.invested;
+    state.towers = state.towers.filter((t) => t !== src);
+    if (state.selected === src) deselect();
+    if (pips < 2) {
+      target.mergePips = pips;
+      target.invested = invested;
+      spawnParticle(target.x, target.y, "#69f0ae", 10);
+      sfx("build", target.type);
+      toast(`合成进度 ${pips + 1}/3`, 1400);
+      updateHUD();
+      return;
+    }
+    const newStar = Math.min(3, target.star + 1);
+    state.towers = state.towers.filter((t) => t !== target);
+    const merged = new Tower(target.type, target.c, target.r, {
+      star: newStar, level: 1, invested, branch: null,
+    });
+    merged.mergePips = newStar < 3 ? pips - 2 : 0;
+    state.towers.push(merged);
+    spawnParticle(merged.x, merged.y, merged.color, 18);
+    spawnParticle(merged.x, merged.y, "#ffd54f", 12);
+    sfx("upgrade");
+    selectTower(merged);
+    toast(`合成成功：${merged.name} ${"★".repeat(newStar)}`, 2000);
+    if (newStar >= 3 && !merged.branch) openBranchPicker(merged);
+    updateHUD();
+  }
+
+  function tryPickMergeTower() {
+    // 旧点选合成已废弃，保留空壳避免误点击崩
+    return false;
+  }
+
+  function openBranchPicker(tower) {
+    if (!branchOverlay || !tower || tower.star < 3) return;
+    state.pendingBranchTower = tower;
+    state.paused = true; // soft pause while choosing
+    if (pauseOverlay) pauseOverlay.classList.add("hidden");
+    const pack = BRANCH_DEFS[tower.type];
+    if (branchTitle) branchTitle.textContent = `${tower.name} 3★ 专精`;
+    if (branchOptions) {
+      branchOptions.innerHTML = "";
+      Object.values(pack).forEach((b) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "action-btn primary branch-opt";
+        btn.innerHTML = `<strong>${b.name}</strong><span>${b.desc}</span>`;
+        btn.addEventListener("click", () => {
+          chooseBranch(b.id);
+        });
+        branchOptions.appendChild(btn);
+      });
+    }
+    branchOverlay.classList.remove("hidden");
+  }
+
+  function chooseBranch(branchId) {
+    const t = state.pendingBranchTower;
+    if (!t) return;
+    t.branch = branchId;
+    t.refresh();
+    state.pendingBranchTower = null;
+    if (branchOverlay) branchOverlay.classList.add("hidden");
+    state.paused = false;
+    if (btnPause) {
+      btnPause.setAttribute("aria-pressed", "false");
+      btnPause.textContent = "暂停";
+    }
+    toast(`专精：${branchLabel(t.type, branchId)}`, 2000);
+    sfx("upgrade");
+    if (state.selected === t) refreshSelectPanel();
+    updateHUD();
   }
 
   function skillStageMul() {
@@ -2172,10 +2275,26 @@
   }
 
   // ---------- 输入 ----------
+  function cancelDrag() {
+    state.drag = null;
+  }
+
   function pointerToCell(e) {
     const rect = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    let clientX, clientY;
+    if (e.touches && e.touches.length) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else if (e.changedTouches && e.changedTouches.length) {
+      clientX = e.changedTouches[0].clientX;
+      clientY = e.changedTouches[0].clientY;
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+    if (clientX == null || clientY == null || !rect.width || !rect.height) {
+      return { c: -1, r: -1, x: 0, y: 0 };
+    }
     const x = ((clientX - rect.left) / rect.width) * canvas.width;
     const y = ((clientY - rect.top) / rect.height) * canvas.height;
     const c = Math.floor(x / cellSize);
@@ -2252,6 +2371,8 @@
   function onPointerUp(e) {
     const d = state.drag;
     if (!d) return;
+    // 忽略其它触点结束，避免多指误清
+    if (d.pid != null && e.pointerId != null && d.pid !== e.pointerId) return;
     state.drag = null;
     try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
     if (!state.towers.includes(d.tower)) return;
@@ -2273,13 +2394,24 @@
       sfx("click");
       return;
     }
-    feedMerge(target, d.tower);
+    try {
+      feedMerge(target, d.tower);
+    } catch (err) {
+      console.error("[路卫] merge error", err);
+      toast("合成失败，已取消", 1600);
+      cancelDrag();
+    }
   }
 
   canvas.addEventListener("pointerdown", onPointerDown);
   canvas.addEventListener("pointermove", onPointerMove);
   canvas.addEventListener("pointerup", onPointerUp);
-  canvas.addEventListener("pointercancel", () => { state.drag = null; });
+  canvas.addEventListener("pointercancel", (e) => {
+    cancelDrag();
+    try { if (e && e.pointerId != null) canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+  });
+  canvas.addEventListener("lostpointercapture", () => { cancelDrag(); });
+  window.addEventListener("blur", () => { cancelDrag(); });
   canvas.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
   const stage = document.getElementById("stage-wrap");
   if (stage) {
@@ -4613,12 +4745,17 @@
     let dt = wallNow - last;
     last = wallNow;
     if (dt > 0.05) dt = 0.05;
-    if (!state.paused && state.phase !== "menu" && !state.ended) {
-      const simDt = dt * (state.speed || 1);
-      gameNow += simDt;
-      update(simDt, gameNow);
+    try {
+      if (!state.paused && state.phase !== "menu" && !state.ended) {
+        const simDt = dt * (state.speed || 1);
+        gameNow += simDt;
+        update(simDt, gameNow);
+      }
+      draw();
+    } catch (err) {
+      cancelDrag();
+      console.error("[路卫] frame error", err);
     }
-    draw();
     requestAnimationFrame(frame);
   }
 
