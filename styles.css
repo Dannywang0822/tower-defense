@@ -305,6 +305,8 @@ html, body {
   transition: border-color 0.15s, background 0.15s, box-shadow 0.15s, transform 0.12s;
   position: relative;
   overflow: hidden;
+  touch-action: none;
+  user-select: none;
 }
 .tower-btn::before {
   content: "";
