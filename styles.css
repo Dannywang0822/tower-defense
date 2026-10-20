@@ -722,3 +722,115 @@ body[data-decor="toxic"] #stage-wrap { border-color: #5e7a48; }
 }
 .branch-opt strong { font-size: 16px; color: #ffe082; }
 .branch-opt span { font-size: 12px; color: var(--muted); font-weight: 500; }
+
+
+/* ---- v18 继续战斗 / 技能三选二 / 折叠屏适配 ---- */
+.start-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.start-actions .action-btn { width: 100%; }
+#btn-continue.hidden { display: none !important; }
+
+#skill-pick-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 6, 4, 0.78);
+  padding: 12px;
+}
+#skill-pick-overlay.hidden { display: none !important; }
+.skill-pick-card {
+  max-width: 360px;
+  width: min(360px, 100%);
+  max-height: min(90dvh, 640px);
+  overflow-y: auto;
+  margin: auto;
+}
+.skill-pick-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+.skill-pick-opt {
+  text-align: left;
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 6px 10px;
+  align-items: start;
+  padding: 10px 12px !important;
+  border: 1.5px solid #4a3c28;
+  background: linear-gradient(180deg, #3a3022 0%, #221c14 100%);
+  border-radius: 10px;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+.skill-pick-opt .sp-icon {
+  font-size: 22px;
+  line-height: 1;
+  grid-row: span 2;
+  align-self: center;
+}
+.skill-pick-opt .sp-name { font-weight: 700; color: #ffe082; font-size: 15px; }
+.skill-pick-opt .sp-desc { font-size: 11px; color: var(--muted); grid-column: 2; }
+.skill-pick-opt .sp-meta { font-size: 10px; color: #a1887f; grid-column: 2; }
+.skill-pick-opt.selected {
+  border-color: #d4af55;
+  box-shadow: 0 0 0 1px rgba(212,175,85,0.35) inset, 0 0 12px rgba(212,175,85,0.2);
+  background: linear-gradient(180deg, #4a3c22 0%, #2e2414 100%);
+}
+.skill-pick-opt:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.skill-btn[data-skill="meteor"] { border-color: #ff7043; }
+.skill-btn[data-skill="reinforce"] { border-color: #ffd54f; }
+.skill-btn[data-skill="hourglass"] { border-color: #81d4fa; }
+.skill-btn[data-skill="chain"] { border-color: #ce93d8; }
+.skill-btn[data-skill="goldtide"] { border-color: #ffd54f; }
+
+/* 开始卡可滚动，矮屏/折叠屏不裁切 */
+.start-card {
+  max-height: min(92dvh, 720px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 折叠屏展开：宽而矮 */
+@media (max-height: 520px) and (min-width: 600px) {
+  #app {
+    --hud-pad-y: 3px;
+    --hud-pad-x: 8px;
+    --hud-font: 11px;
+    --panel-pad: 4px;
+    --tb-pad: 4px 2px;
+    --tb-min-h: 36px;
+  }
+  #hud { gap: 2px; }
+  .hud-item { padding: 1px 4px; font-size: 11px; }
+  .skill-btn { min-width: 40px; padding: 2px 5px; font-size: 10px; }
+  .panel-title { margin-bottom: 2px; font-size: 10px; }
+  .hint { display: none; }
+  .start-card { max-width: 520px; }
+  .diff-btns, .map-btns { grid-template-columns: repeat(5, 1fr); }
+}
+
+/* 超窄竖屏（折叠外屏） */
+@media (max-width: 320px) {
+  #hud { padding-left: 4px; padding-right: 4px; }
+  .hud-item[title="难度"], .hud-status { display: none; }
+  .skill-btn { min-width: 36px; padding: 2px 4px; }
+  .tower-btn .tb-desc { display: none; }
+}
+
+/* 矮竖屏再压一层 */
+@media (max-height: 560px) and (max-width: 480px) {
+  .hint, .start-sub { display: none; }
+  .start-section-title { margin-top: 4px; margin-bottom: 2px; }
+  .level-row input { height: 32px; }
+}

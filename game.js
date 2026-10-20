@@ -28,9 +28,42 @@
       shatter: { id: "shatter", name: "碎冰", desc: "减速中目标全伤害 +25%" },
     },
   };
-  const SKILL_METEOR_CD = 60;
-  const SKILL_REINFORCE_CD = 45;
   const MERGE_MIN_LEVEL = 2; // 合成要求 Lv≥2，缓和 3★ 节奏
+  const RUN_SNAPSHOT_KEY = "coinpath_run_v18";
+  /** 主动技能池（专家表）：S = 1+0.2×(stage−1)；每关三选二 */
+  const SKILL_DEFS = {
+    meteor: {
+      id: "meteor", short: "火雨", name: "流星火雨", icon: "☄",
+      cd: 60, aim: "point", weight: 1,
+      desc: "点地图落下火雨，半径 2 格",
+      meta: "冷却 60s · 伤 120×S · Boss×0.5",
+    },
+    reinforce: {
+      id: "reinforce", short: "援军", name: "援军", icon: "🛡",
+      cd: 45, aim: "instant", weight: 1,
+      desc: "路径召唤 3 名拦路兵，持续 8 秒",
+      meta: "冷却 45s · 血 200×S · Boss 仅减速",
+    },
+    hourglass: {
+      id: "hourglass", short: "沙漏", name: "时光沙漏", icon: "⌛",
+      cd: 75, aim: "instant", weight: 0.7,
+      desc: "全场敌人大幅减速 4 秒",
+      meta: "冷却 75s · 移速×0.4 · Boss×0.65",
+    },
+    chain: {
+      id: "chain", short: "雷击", name: "连锁雷击", icon: "⚡",
+      cd: 50, aim: "enemy", weight: 1,
+      desc: "点选 1 只怪，弹射 6 次优先最近",
+      meta: "冷却 50s · 每跳 80×S · 衰减 15% · 盾×1.2",
+    },
+    goldtide: {
+      id: "goldtide", short: "金潮", name: "金币潮", icon: "💰",
+      cd: 90, aim: "instant", weight: 0.7,
+      desc: "立刻得金，且 8 秒内击杀赏金×1.5",
+      meta: "冷却 90s · 金 round(25×√阶) · 赏金×1.5",
+    },
+  };
+  const SKILL_IDS = Object.keys(SKILL_DEFS);
   const BASE_HP = 40;
   const BASE_SPEED = 1.0; // 格/秒
   const BASE_REWARD = 8;
@@ -534,13 +567,16 @@
   const btnHudMenu = document.getElementById("btn-hud-menu");
   const startMapBtns = document.getElementById("start-map-btns");
   const btnMerge = document.getElementById("btn-merge");
-  const btnSkillMeteor = document.getElementById("btn-skill-meteor");
-  const btnSkillReinforce = document.getElementById("btn-skill-reinforce");
+  const skillBtnsEl = document.getElementById("skill-btns");
   const branchOverlay = document.getElementById("branch-overlay");
   const branchTitle = document.getElementById("branch-title");
   const branchOptions = document.getElementById("branch-options");
-  const skillMeteorCd = document.getElementById("skill-meteor-cd");
-  const skillReinforceCd = document.getElementById("skill-reinforce-cd");
+  const skillPickOverlay = document.getElementById("skill-pick-overlay");
+  const skillPickOptions = document.getElementById("skill-pick-options");
+  const skillPickCount = document.getElementById("skill-pick-count");
+  const btnSkillConfirm = document.getElementById("btn-skill-confirm");
+  const btnSkillCancel = document.getElementById("btn-skill-cancel");
+  const btnContinue = document.getElementById("btn-continue");
 
   // ---------- 状态 ----------
   let cellSize = 50;
@@ -577,12 +613,16 @@
     paused: false,
     mergeMode: false,
     mergePicks: [],
-    skillAim: null, // null | "meteor"
+    skillAim: null, // null | skillId needing aim
     fires: [],
     allies: [],
-    skillCd: { meteor: 0, reinforce: 0 },
+    activeSkills: [], // 本关带入的 2 个技能 id
+    skillCd: {},
     skillHintShown: false,
     pendingBranchTower: null,
+    timeSlowUntil: 0,
+    goldTideUntil: 0,
+    pendingStart: null, // {level,diff,map} while picking skills
   };
 
   /** 模拟时钟（秒），随倍速推进；慢速/闪白/弹道寿命用它，避免墙钟与倍速错位 */
@@ -946,6 +986,14 @@
     }
   }
 
+  function visualTierFor(kind) {
+    if (kind === "boss") return "boss";
+    if (kind === "shield" || kind === "flyer" || kind === "splitter" ||
+        kind === "healer" || kind === "blinker") return "elite";
+    if (kind === "tank") return "heavy";
+    return "normal"; // infantry / fast / spawn
+  }
+
   class Enemy {
     constructor(kind, speedMul, hpMul, reward) {
       this.kind = kind;
@@ -1013,6 +1061,22 @@
         this.radius = 0.32;
         this.color = "#7cb342";
         this.colorDark = "#33691e";
+      }
+      this.visualTier = visualTierFor(kind);
+      // 视觉档：仅改绘制，不改 maxHp/speed/reward
+      if (this.visualTier === "elite") {
+        this.drawScale = 1.2;
+        this.yLift = 3;
+      } else if (this.visualTier === "boss") {
+        this.drawScale = 1.75;
+        this.yLift = 0;
+        this.spawnFlashUntil = 0; // 入场时再设
+      } else if (this.visualTier === "heavy") {
+        this.drawScale = 1.1;
+        this.yLift = 1;
+      } else {
+        this.drawScale = 1.0;
+        this.yLift = 0;
       }
       const p = posOnPath(0);
       this.x = p.x;
@@ -1211,23 +1275,17 @@
   }
 
   function advanceToNextLevel() {
-    const prevStage = state.stage;
     const nextLevel = state.level + 1;
-    recordLevelClear(state.difficulty, state.level);
+    const diff = state.difficulty;
+    const map = state.mapIndex;
+    recordLevelClear(diff, state.level);
+    clearRunSnapshot();
     clearLevelBoard();
-    setupLevel(nextLevel, state.difficulty, { toastMap: true, prevStage });
-    state.lives = startingLives();
-    state.gold = startingGold();
-    state.wave = 0;
-    state.spent = 0;
-    state.ended = false;
-    state.phase = "idle";
-    btnNextWave.disabled = false;
-    btnNextWave.classList.remove("waiting");
-    btnNextWave.textContent = "开始第 1 波";
-    updateBuildButtons();
-    updateHUD();
-    toast(`进入第 ${nextLevel} 关 · ${diffDef().name}`, 2200);
+    state.phase = "menu"; // 防止误存快照 / 继续 tick
+    state.enemies = [];
+    state.projectiles = [];
+    // 每关重新三选二
+    openSkillPick(nextLevel, diff, map);
   }
 
   function checkWaveClear() {
@@ -1255,6 +1313,7 @@
   function winGame() {
     state.phase = "won";
     state.ended = true;
+    clearRunSnapshot();
     sfx("victory");
     showEnd(true);
   }
@@ -1262,6 +1321,7 @@
   function loseGame() {
     state.phase = "lost";
     state.ended = true;
+    clearRunSnapshot();
     sfx("defeat");
     showEnd(false);
   }
@@ -1288,16 +1348,23 @@
 
   function resetGame() {
     if (state.phase === "won") {
+      clearRunSnapshot();
       showStartMenu();
       return;
     }
-    beginLevelRun(state.level, state.difficulty, state.mapIndex);
+    clearRunSnapshot();
+    openSkillPick(state.level, state.difficulty, state.mapIndex);
   }
 
-  function beginLevelRun(level, diffKey, mapIndex) {
+  function beginLevelRun(level, diffKey, mapIndex, opts) {
+    opts = opts || {};
+    clearRunSnapshot(); // 新开一局清除继续战斗
     clearLevelBoard();
     const mi = mapIndex != null ? mapIndex : menuMap;
     setupLevel(level, diffKey, { mapIndex: Math.max(0, Math.min(SCENE_SKINS.length - 1, mi | 0)) });
+    const skills = (opts.skills && opts.skills.length === 2)
+      ? opts.skills.slice()
+      : (state.activeSkills && state.activeSkills.length === 2 ? state.activeSkills.slice() : ["meteor", "reinforce"]);
     Object.assign(state, {
       lives: startingLives(),
       gold: startingGold(),
@@ -1319,12 +1386,17 @@
       skillAim: null,
       fires: [],
       allies: [],
-      skillCd: { meteor: 0, reinforce: 0 },
+      activeSkills: skills,
+      skillCd: emptySkillCd(skills),
       skillHintShown: false,
       pendingBranchTower: null,
+      timeSlowUntil: 0,
+      goldTideUntil: 0,
+      pendingStart: null,
     });
     if (branchOverlay) branchOverlay.classList.add("hidden");
     if (pauseOverlay) pauseOverlay.classList.add("hidden");
+    if (skillPickOverlay) skillPickOverlay.classList.add("hidden");
     if (btnPause) {
       btnPause.setAttribute("aria-pressed", "false");
       btnPause.textContent = "暂停";
@@ -1338,24 +1410,30 @@
     btnNextWave.classList.remove("waiting");
     btnNextWave.textContent = "开始第 1 波";
     syncSpeedButtons();
+    renderSkillButtons();
     updateBuildButtons();
     updateHUD();
     persistSave({ lastDiff: diffKey, lastMap: state.mapIndex, lastLevel: level });
-    toast(`第 ${level} 关 · ${diffDef().name} · ${(SCENE_SKINS[state.mapIndex] || SCENE_SKINS[0]).name}`, 2200);
+    const sn = skills.map((id) => SKILL_DEFS[id].short).join("·");
+    toast(`第 ${level} 关 · ${diffDef().name} · ${(SCENE_SKINS[state.mapIndex] || SCENE_SKINS[0]).name} · ${sn}`, 2200);
   }
 
   function showStartMenu() {
     state.phase = "menu";
     state.ended = false;
     state.paused = false;
+    state.skillAim = null;
     overlay.classList.add("hidden");
     if (pauseOverlay) pauseOverlay.classList.add("hidden");
+    if (skillPickOverlay) skillPickOverlay.classList.add("hidden");
     if (btnPause) {
       btnPause.setAttribute("aria-pressed", "false");
       btnPause.textContent = "暂停";
     }
     if (startOverlay) startOverlay.classList.remove("hidden");
     refreshStartMenu();
+    refreshContinueButton();
+    renderSkillButtons();
   }
 
   function setPaused(on) {
@@ -1394,13 +1472,16 @@
   }
 
   function returnToDifficultySelect() {
+    // 从进行中战斗返回：保存继续战斗快照
+    if (!state.ended && state.phase !== "menu") {
+      saveRunSnapshot();
+    }
     state.paused = false;
     if (pauseOverlay) pauseOverlay.classList.add("hidden");
     if (btnPause) {
       btnPause.setAttribute("aria-pressed", "false");
       btnPause.textContent = "暂停";
     }
-    // 保留 localStorage 存档（best unlock / lastDiff / lastMap / lastLevel）
     showStartMenu();
     sfx("click");
   }
@@ -1500,128 +1581,90 @@
 
   function cancelSkillAim() {
     state.skillAim = null;
-    if (btnSkillMeteor) btnSkillMeteor.classList.remove("aiming");
+    updateSkillButtons();
   }
 
-  function mergeBlockReason(src, dst) {
-    if (!src || !dst || src === dst) return "无效目标";
-    if (src.type !== dst.type) return "需同种塔";
-    if ((src.star || 1) !== (dst.star || 1)) return "需同星级";
-    if (dst.star >= 3) return "已满 3 星";
-    if (src.level < MERGE_MIN_LEVEL || dst.level < MERGE_MIN_LEVEL) return `双方需 Lv≥${MERGE_MIN_LEVEL}`;
-    return "";
+  function skillStageMul() {
+    return 1 + 0.2 * ((state.stage || 1) - 1);
   }
-  function canMergeCandidate(anchor, t) {
-    return !mergeBlockReason(t, anchor);
-  }
-  function countMergePartners(anchor) {
-    if (!anchor) return 0;
-    return state.towers.filter((t) => t !== anchor && canMergeCandidate(anchor, t)).length;
-  }
-  function enterMergeMode() {
-    toast("按住塔拖到另一座同种同星塔上即可合成", 2000);
-  }
-  /** 拖拽合成：3 合 1 不变。每次喂入 +1 进度，进度满 2（=3 座）升星 */
-  function feedMerge(target, src) {
-    const pips = (target.mergePips || 0) + (src.mergePips || 0) + 1;
-    const invested = target.invested + src.invested;
-    state.towers = state.towers.filter((t) => t !== src);
-    if (state.selected === src) deselect();
-    if (pips < 2) {
-      target.mergePips = pips;
-      target.invested = invested;
-      spawnParticle(target.x, target.y, "#69f0ae", 10);
-      sfx("build", target.type);
-      toast(`合成进度 ${pips + 1}/3`, 1400);
-      updateHUD();
-      return;
-    }
-    const newStar = Math.min(3, target.star + 1);
-    state.towers = state.towers.filter((t) => t !== target);
-    const merged = new Tower(target.type, target.c, target.r, { star: newStar, level: 1, invested, branch: null });
-    merged.mergePips = newStar < 3 ? pips - 2 : 0;
-    state.towers.push(merged);
-    spawnParticle(merged.x, merged.y, merged.color, 18);
-    spawnParticle(merged.x, merged.y, "#ffd54f", 12);
-    sfx("upgrade");
-    selectTower(merged);
-    toast(`合成成功：${merged.name} ${"★".repeat(newStar)}`, 2000);
-    if (newStar >= 3 && !merged.branch) openBranchPicker(merged);
-    updateHUD();
-  }
-  function tryPickMergeTower() { return false; }
 
-  function openBranchPicker(tower) {
-    if (!branchOverlay || !tower || tower.star < 3) return;
-    state.pendingBranchTower = tower;
-    state.paused = true; // soft pause while choosing
-    if (pauseOverlay) pauseOverlay.classList.add("hidden");
-    const pack = BRANCH_DEFS[tower.type];
-    if (branchTitle) branchTitle.textContent = `${tower.name} 3★ 专精`;
-    if (branchOptions) {
-      branchOptions.innerHTML = "";
-      Object.values(pack).forEach((b) => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "action-btn primary branch-opt";
-        btn.innerHTML = `<strong>${b.name}</strong><span>${b.desc}</span>`;
-        btn.addEventListener("click", () => {
-          chooseBranch(b.id);
-        });
-        branchOptions.appendChild(btn);
+  function emptySkillCd(ids) {
+    const cd = {};
+    (ids || SKILL_IDS).forEach((id) => { cd[id] = 0; });
+    return cd;
+  }
+
+  function renderSkillButtons() {
+    if (!skillBtnsEl) return;
+    skillBtnsEl.innerHTML = "";
+    const ids = state.activeSkills || [];
+    ids.forEach((id) => {
+      const def = SKILL_DEFS[id];
+      if (!def) return;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "skill-btn";
+      btn.dataset.skill = id;
+      btn.title = def.name;
+      btn.innerHTML = `<span class="skill-name">${def.short}</span><span class="skill-cd" data-cd="${id}">就绪</span>`;
+      btn.addEventListener("click", () => {
+        sfx("click");
+        onSkillButton(id);
       });
-    }
-    branchOverlay.classList.remove("hidden");
-  }
-
-  function chooseBranch(branchId) {
-    const t = state.pendingBranchTower;
-    if (!t) return;
-    t.branch = branchId;
-    t.refresh();
-    state.pendingBranchTower = null;
-    if (branchOverlay) branchOverlay.classList.add("hidden");
-    state.paused = false;
-    if (btnPause) {
-      btnPause.setAttribute("aria-pressed", "false");
-      btnPause.textContent = "暂停";
-    }
-    toast(`专精：${branchLabel(t.type, branchId)}`, 2000);
-    sfx("upgrade");
-    if (state.selected === t) refreshSelectPanel();
-    updateHUD();
-  }
-
-  function skillPowerMul() {
-    const stage = state.stage || 1;
-    return {
-      meteor: 120 * (1 + 0.25 * (stage - 1)),
-      allyHp: 200 * (1 + 0.2 * (stage - 1)),
-    };
+      skillBtnsEl.appendChild(btn);
+    });
+    updateSkillButtons();
   }
 
   function updateSkillButtons() {
-    const mCd = Math.max(0, state.skillCd.meteor);
-    const rCd = Math.max(0, state.skillCd.reinforce);
-    if (btnSkillMeteor) {
-      btnSkillMeteor.disabled = state.ended || state.phase === "menu" || (mCd > 0 && !state.skillAim);
-      if (skillMeteorCd) {
-        skillMeteorCd.textContent = state.skillAim === "meteor" ? "点地" : (mCd > 0 ? `${Math.ceil(mCd)}s` : "就绪");
-      }
-      btnSkillMeteor.classList.toggle("ready", mCd <= 0 && !state.ended && state.phase !== "menu");
-      btnSkillMeteor.classList.toggle("aiming", state.skillAim === "meteor");
+    if (!skillBtnsEl) return;
+    const menu = state.ended || state.phase === "menu";
+    skillBtnsEl.querySelectorAll(".skill-btn").forEach((btn) => {
+      const id = btn.dataset.skill;
+      const def = SKILL_DEFS[id];
+      const cd = Math.max(0, (state.skillCd && state.skillCd[id]) || 0);
+      const aiming = state.skillAim === id;
+      const cdEl = btn.querySelector("[data-cd]");
+      let label = "就绪";
+      if (aiming) label = def && def.aim === "enemy" ? "点怪" : "点地";
+      else if (cd > 0) label = `${Math.ceil(cd)}s`;
+      if (cdEl) cdEl.textContent = label;
+      btn.disabled = menu || (cd > 0 && !aiming) || (!!state.skillAim && !aiming);
+      btn.classList.toggle("ready", cd <= 0 && !menu);
+      btn.classList.toggle("aiming", aiming);
+    });
+  }
+
+  function onSkillButton(id) {
+    if (state.ended || state.phase === "menu" || state.paused) return;
+    const def = SKILL_DEFS[id];
+    if (!def) return;
+    if (!(state.activeSkills || []).includes(id)) return;
+    if (state.skillAim === id) {
+      cancelSkillAim();
+      toast("已取消瞄准");
+      return;
     }
-    if (btnSkillReinforce) {
-      btnSkillReinforce.disabled = state.ended || state.phase === "menu" || rCd > 0 || !!state.skillAim;
-      if (skillReinforceCd) {
-        skillReinforceCd.textContent = rCd > 0 ? `${Math.ceil(rCd)}s` : "就绪";
-      }
-      btnSkillReinforce.classList.toggle("ready", rCd <= 0 && !state.ended && state.phase !== "menu");
+    const cd = (state.skillCd && state.skillCd[id]) || 0;
+    if (cd > 0) {
+      toast(`${def.short}冷却 ${Math.ceil(cd)}s`);
+      return;
     }
+    cancelMergeMode();
+    state.buildType = null;
+    if (def.aim === "instant") {
+      castSkill(id, null, null);
+      return;
+    }
+    state.skillAim = id;
+    toast(def.aim === "enemy" ? `点选一只怪释放${def.name}` : `点地图释放${def.name}`, 1800);
+    updateBuildButtons();
+    updateSkillButtons();
   }
 
   function castMeteorAt(x, y) {
-    const pow = skillPowerMul().meteor;
+    const S = skillStageMul();
+    const pow = 120 * S;
     const radius = 2 * cellSize;
     let hits = 0;
     for (const e of state.enemies) {
@@ -1638,71 +1681,430 @@
     });
     spawnParticle(x, y, "#ff7043", 18);
     sfx("boom");
-    state.skillCd.meteor = SKILL_METEOR_CD;
+    state.skillCd.meteor = SKILL_DEFS.meteor.cd;
     cancelSkillAim();
     toast(hits ? `流星火雨 · 命中 ${hits}` : "流星火雨 · 空放", 1600);
-    if (!state.skillHintShown) {
-      state.skillHintShown = true;
-      toast("技能开局即就绪，点按钮后点地图释放火雨", 2400);
-    }
     updateSkillButtons();
     updateHUD();
   }
 
-  function beginMeteorAim() {
-    if (state.ended || state.phase === "menu" || state.paused) return;
-    if (state.skillAim === "meteor") {
-      cancelSkillAim();
-      toast("已取消火雨瞄准");
-      updateSkillButtons();
-      return;
-    }
-    if (state.skillCd.meteor > 0) {
-      toast(`火雨冷却 ${Math.ceil(state.skillCd.meteor)}s`);
-      return;
-    }
-    cancelMergeMode();
-    state.buildType = null;
-    state.skillAim = "meteor";
-    toast("点地图落点释放流星火雨", 1800);
-    if (!state.skillHintShown) {
-      state.skillHintShown = true;
-    }
-    updateBuildButtons();
-    updateSkillButtons();
-  }
-
   function castReinforce() {
-    if (state.ended || state.phase === "menu" || state.paused) return;
-    if (state.skillCd.reinforce > 0) {
-      toast(`援军冷却 ${Math.ceil(state.skillCd.reinforce)}s`);
-      return;
-    }
     if (!pathLen) return;
-    const hp = skillPowerMul().allyHp;
+    const hp = 200 * skillStageMul();
     const slots = [0.35, 0.5, 0.65];
     for (const frac of slots) {
       const prog = pathLen * frac;
       const p = posOnPath(prog);
       state.allies.push({
-        x: p.x,
-        y: p.y,
-        progress: prog,
-        hp,
-        maxHp: hp,
-        until: gameNow + 8,
-        radius: 0.28,
+        x: p.x, y: p.y, progress: prog,
+        hp, maxHp: hp, until: gameNow + 8, radius: 0.28,
       });
       spawnParticle(p.x, p.y, "#ffd54f", 8);
     }
-    state.skillCd.reinforce = SKILL_REINFORCE_CD;
+    state.skillCd.reinforce = SKILL_DEFS.reinforce.cd;
     sfx("build");
     toast("援军就位 · 拦路 8 秒", 1600);
-    if (!state.skillHintShown) {
-      state.skillHintShown = true;
-      toast("技能开局即就绪：火雨点地，援军一键召唤", 2400);
-    }
+    cancelSkillAim();
     updateSkillButtons();
+  }
+
+  function castHourglass() {
+    state.timeSlowUntil = gameNow + 4;
+    state.skillCd.hourglass = SKILL_DEFS.hourglass.cd;
+    for (const e of state.enemies) {
+      if (e.dead || e.escaped) continue;
+      spawnParticle(e.x, e.y, "#81d4fa", 3);
+    }
+    sfx("upgrade");
+    toast("时光沙漏 · 全场减速 4 秒", 1600);
+    cancelSkillAim();
+    updateSkillButtons();
+  }
+
+  function castGoldTide() {
+    const stage = state.stage || 1;
+    const gain = Math.round(25 * Math.sqrt(stage));
+    state.gold += gain;
+    state.goldTideUntil = gameNow + 8;
+    state.skillCd.goldtide = SKILL_DEFS.goldtide.cd;
+    spawnParticle(canvas.width * 0.5, canvas.height * 0.35, "#ffd54f", 16);
+    sfx("upgrade");
+    toast(`金币潮 · +${gain} 金 · 8 秒赏金×1.5`, 1800);
+    cancelSkillAim();
+    updateSkillButtons();
+    updateHUD();
+  }
+
+  function castChainFrom(seed) {
+    const S = skillStageMul();
+    const base = 80 * S;
+    const hit = [];
+    let cur = seed;
+    let jumps = 0;
+    const maxJumps = 6;
+    while (cur && jumps < maxJumps) {
+      if (cur.dead || cur.escaped || hit.includes(cur)) break;
+      hit.push(cur);
+      let dmg = base * Math.pow(0.85, jumps);
+      if (cur.kind === "shield") dmg *= 1.2;
+      damageEnemy(cur, dmg, gameNow, "arrow", false);
+      spawnParticle(cur.x, cur.y, "#ce93d8", 6);
+      state.explosions.push({
+        x: cur.x, y: cur.y, r: 2, maxR: cellSize * 0.55,
+        life: 0.22, maxLife: 0.22, shards: 4, tint: "#e1bee7",
+      });
+      jumps++;
+      // next nearest unhit
+      let best = null, bestD = Infinity;
+      for (const e of state.enemies) {
+        if (e.dead || e.escaped || hit.includes(e)) continue;
+        const d = dist(cur.x, cur.y, e.x, e.y);
+        if (d < bestD) { bestD = d; best = e; }
+      }
+      if (best && hit.length >= 2) {
+        // draw bolt line via explosion trail particles
+        const prev = hit[hit.length - 2];
+        const steps = 4;
+        for (let i = 1; i < steps; i++) {
+          const t = i / steps;
+          spawnParticle(
+            prev.x + (cur.x - prev.x) * t,
+            prev.y + (cur.y - prev.y) * t,
+            "#b39ddb", 1
+          );
+        }
+      }
+      cur = best;
+      if (bestD > cellSize * 4.5) break;
+    }
+    // fix bolt visuals between consecutive hits
+    for (let i = 1; i < hit.length; i++) {
+      const a = hit[i - 1], b = hit[i];
+      for (let k = 1; k < 5; k++) {
+        const t = k / 5;
+        spawnParticle(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, "#e1bee7", 1);
+      }
+    }
+    state.skillCd.chain = SKILL_DEFS.chain.cd;
+    sfx("boom");
+    toast(hit.length ? `连锁雷击 · ${hit.length} 跳` : "连锁雷击 · 未命中", 1600);
+    cancelSkillAim();
+    updateSkillButtons();
+    updateHUD();
+  }
+
+  function castSkill(id, x, y, enemy) {
+    if (id === "meteor") castMeteorAt(x, y);
+    else if (id === "reinforce") castReinforce();
+    else if (id === "hourglass") castHourglass();
+    else if (id === "goldtide") castGoldTide();
+    else if (id === "chain") {
+      if (!enemy) {
+        toast("请点选一只怪");
+        return;
+      }
+      castChainFrom(enemy);
+    }
+  }
+
+  function pickNearestEnemy(x, y, maxDist) {
+    let best = null, bestD = maxDist != null ? maxDist : cellSize * 1.6;
+    for (const e of state.enemies) {
+      if (e.dead || e.escaped) continue;
+      const d = dist(x, y, e.x, e.y);
+      if (d <= bestD + e.radius * cellSize) {
+        if (!best || d < bestD) { best = e; bestD = d; }
+      }
+    }
+    return best;
+  }
+
+  function weightedSampleSkills(n) {
+    const pool = SKILL_IDS.slice();
+    const picked = [];
+    for (let k = 0; k < n && pool.length; k++) {
+      let total = 0;
+      const weights = pool.map((id) => {
+        const w = SKILL_DEFS[id].weight || 1;
+        total += w;
+        return w;
+      });
+      let r = Math.random() * total;
+      let idx = 0;
+      for (; idx < pool.length; idx++) {
+        r -= weights[idx];
+        if (r <= 0) break;
+      }
+      if (idx >= pool.length) idx = pool.length - 1;
+      picked.push(pool.splice(idx, 1)[0]);
+    }
+    return picked;
+  }
+
+  let skillPickOffered = [];
+  let skillPickSelected = [];
+
+  function openSkillPick(level, diffKey, mapIndex) {
+    state.pendingStart = { level, diff: diffKey, map: mapIndex };
+    state.paused = true; // 选技能时冻结
+    if (pauseOverlay) pauseOverlay.classList.add("hidden");
+    skillPickOffered = weightedSampleSkills(3);
+    skillPickSelected = [];
+    if (skillPickCount) skillPickCount.textContent = "0";
+    if (btnSkillConfirm) btnSkillConfirm.disabled = true;
+    if (skillPickOptions) {
+      skillPickOptions.innerHTML = "";
+      skillPickOffered.forEach((id) => {
+        const def = SKILL_DEFS[id];
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "skill-pick-opt";
+        btn.dataset.skill = id;
+        btn.innerHTML =
+          `<span class="sp-icon">${def.icon}</span>` +
+          `<span class="sp-name">${def.name}</span>` +
+          `<span class="sp-desc">${def.desc}</span>` +
+          `<span class="sp-meta">${def.meta}</span>`;
+        btn.addEventListener("click", () => toggleSkillPick(id, btn));
+        skillPickOptions.appendChild(btn);
+      });
+    }
+    if (startOverlay) startOverlay.classList.add("hidden");
+    if (overlay) overlay.classList.add("hidden");
+    if (skillPickOverlay) skillPickOverlay.classList.remove("hidden");
+  }
+
+  function toggleSkillPick(id, btn) {
+    const i = skillPickSelected.indexOf(id);
+    if (i >= 0) {
+      skillPickSelected.splice(i, 1);
+      btn.classList.remove("selected");
+    } else {
+      if (skillPickSelected.length >= 2) {
+        toast("最多选 2 个技能");
+        return;
+      }
+      skillPickSelected.push(id);
+      btn.classList.add("selected");
+    }
+    if (skillPickCount) skillPickCount.textContent = String(skillPickSelected.length);
+    if (btnSkillConfirm) btnSkillConfirm.disabled = skillPickSelected.length !== 2;
+    sfx("click");
+  }
+
+  function confirmSkillPick() {
+    if (skillPickSelected.length !== 2 || !state.pendingStart) return;
+    const p = state.pendingStart;
+    state.pendingStart = null;
+    if (skillPickOverlay) skillPickOverlay.classList.add("hidden");
+    beginLevelRun(p.level, p.diff, p.map, { skills: skillPickSelected.slice() });
+  }
+
+  function cancelSkillPick() {
+    state.pendingStart = null;
+    if (skillPickOverlay) skillPickOverlay.classList.add("hidden");
+    showStartMenu();
+    sfx("click");
+  }
+
+  // ---------- 继续战斗快照 ----------
+  function clearRunSnapshot() {
+    try { localStorage.removeItem(RUN_SNAPSHOT_KEY); } catch (_) {}
+    refreshContinueButton();
+  }
+
+  function hasRunSnapshot() {
+    try {
+      const raw = localStorage.getItem(RUN_SNAPSHOT_KEY);
+      if (!raw) return false;
+      const data = JSON.parse(raw);
+      return !!(data && data.v === 18 && data.state && Array.isArray(data.state.activeSkills));
+    } catch (_) { return false; }
+  }
+
+  function serializeEnemy(e) {
+    return {
+      kind: e.kind, hp: e.hp, maxHp: e.maxHp, reward: e.reward,
+      progress: e.progress, baseSpeed: e.baseSpeed / cellSize,
+      slowMul: e.slowMul, slowUntil: e.slowUntil, freezeUntil: e.freezeUntil,
+      freezeIcdUntil: e.freezeIcdUntil, radius: e.radius, color: e.color,
+      colorDark: e.colorDark, priority: e.priority,
+      splitOnDeath: !!e.splitOnDeath, healTimer: e.healTimer || 0,
+      blinkTimer: e.blinkTimer || 0, visualTier: e.visualTier,
+      drawScale: e.drawScale, yLift: e.yLift,
+      spawnFlashUntil: e.spawnFlashUntil || 0,
+    };
+  }
+
+  function restoreEnemy(data) {
+    const e = new Enemy(data.kind, 1, 1, data.reward);
+    e.maxHp = data.maxHp;
+    e.hp = data.hp;
+    e.reward = data.reward;
+    e.progress = data.progress;
+    e.baseSpeed = data.baseSpeed * cellSize;
+    e.slowMul = data.slowMul;
+    e.slowUntil = data.slowUntil;
+    e.freezeUntil = data.freezeUntil;
+    e.freezeIcdUntil = data.freezeIcdUntil;
+    e.radius = data.radius;
+    e.color = data.color;
+    e.colorDark = data.colorDark;
+    e.priority = data.priority;
+    e.splitOnDeath = data.splitOnDeath;
+    e.healTimer = data.healTimer;
+    e.blinkTimer = data.blinkTimer;
+    e.visualTier = data.visualTier || visualTierFor(data.kind);
+    e.drawScale = data.drawScale || e.drawScale;
+    e.yLift = data.yLift != null ? data.yLift : e.yLift;
+    e.spawnFlashUntil = data.spawnFlashUntil || 0;
+    const p = posOnPath(Math.min(e.progress, Math.max(0, pathLen - 0.01)));
+    e.x = p.x; e.y = p.y; e.angle = p.angle;
+    return e;
+  }
+
+  function serializeTower(t) {
+    return {
+      type: t.type, c: t.c, r: t.r, star: t.star, level: t.level,
+      invested: t.invested, branch: t.branch, mergePips: t.mergePips || 0,
+    };
+  }
+
+  function saveRunSnapshot() {
+    if (state.phase === "menu" || state.ended) return;
+    if (!["idle", "countdown", "spawning", "fighting"].includes(state.phase)) return;
+    try {
+      const snap = {
+        v: 18,
+        gameNow,
+        state: {
+          difficulty: state.difficulty,
+          mapIndex: state.mapIndex,
+          level: state.level,
+          stage: state.stage,
+          seed: state.seed,
+          lives: state.lives,
+          gold: state.gold,
+          wave: state.wave,
+          kills: state.kills,
+          spent: state.spent,
+          phase: state.phase,
+          countdown: state.countdown,
+          speed: state.speed,
+          waveWallStart: state.waveWallStart,
+          activeSkills: (state.activeSkills || []).slice(),
+          skillCd: Object.assign({}, state.skillCd),
+          skillAim: null,
+          timeSlowUntil: state.timeSlowUntil || 0,
+          goldTideUntil: state.goldTideUntil || 0,
+          skillHintShown: !!state.skillHintShown,
+          _nextWave: state._nextWave || 0,
+          spawnTimer: state.spawnTimer,
+          spawnQueue: (state.spawnQueue || []).map((q) => Object.assign({}, q)),
+          towers: state.towers.map(serializeTower),
+          enemies: state.enemies.filter((e) => !e.dead && !e.escaped).map(serializeEnemy),
+          allies: (state.allies || []).map((a) => Object.assign({}, a)),
+          fires: (state.fires || []).map((f) => Object.assign({}, f)),
+          pendingBranch: state.pendingBranchTower
+            ? { c: state.pendingBranchTower.c, r: state.pendingBranchTower.r, branch: state.pendingBranchTower.branch }
+            : null,
+        },
+      };
+      localStorage.setItem(RUN_SNAPSHOT_KEY, JSON.stringify(snap));
+    } catch (_) {}
+    refreshContinueButton();
+  }
+
+  function restoreRunSnapshot() {
+    let data;
+    try {
+      data = JSON.parse(localStorage.getItem(RUN_SNAPSHOT_KEY) || "null");
+    } catch (_) { return false; }
+    if (!data || data.v !== 18 || !data.state) return false;
+    const s = data.state;
+    clearLevelBoard();
+    setupLevel(s.level, s.difficulty, { mapIndex: s.mapIndex });
+    Object.assign(state, {
+      lives: s.lives,
+      gold: s.gold,
+      wave: s.wave,
+      kills: s.kills,
+      spent: s.spent,
+      phase: s.phase === "menu" ? "idle" : s.phase,
+      countdown: s.countdown || 0,
+      buildType: null,
+      selected: null,
+      spawnTimer: s.spawnTimer || 0,
+      hoverCell: null,
+      ended: false,
+      speed: s.speed || 1,
+      waveWallStart: s.waveWallStart,
+      paused: false,
+      mergeMode: false,
+      mergePicks: [],
+      skillAim: null,
+      fires: [],
+      allies: [],
+      activeSkills: (s.activeSkills || []).slice(),
+      skillCd: Object.assign(emptySkillCd(), s.skillCd || {}),
+      skillHintShown: !!s.skillHintShown,
+      pendingBranchTower: null,
+      timeSlowUntil: s.timeSlowUntil || 0,
+      goldTideUntil: s.goldTideUntil || 0,
+      pendingStart: null,
+      _nextWave: s._nextWave || 0,
+    });
+    state.spawnQueue = (s.spawnQueue || []).map((q) => Object.assign({}, q));
+    state.towers = (s.towers || []).map((td) => {
+      const t = new Tower(td.type, td.c, td.r, {
+        star: td.star, level: td.level, invested: td.invested, branch: td.branch,
+      });
+      t.mergePips = td.mergePips || 0;
+      return t;
+    });
+    state.enemies = (s.enemies || []).map(restoreEnemy);
+    state.allies = (s.allies || []).map((a) => Object.assign({}, a));
+    state.fires = (s.fires || []).map((f) => Object.assign({}, f));
+    gameNow = data.gameNow || 0;
+    if (s.pendingBranch) {
+      const t = towerAt(s.pendingBranch.c, s.pendingBranch.r);
+      if (t && t.star >= 3 && !t.branch) openBranchPicker(t);
+    }
+    if (branchOverlay && !state.pendingBranchTower) branchOverlay.classList.add("hidden");
+    if (pauseOverlay) pauseOverlay.classList.add("hidden");
+    if (btnPause) {
+      btnPause.setAttribute("aria-pressed", "false");
+      btnPause.textContent = "暂停";
+    }
+    overlay.classList.add("hidden");
+    if (startOverlay) startOverlay.classList.add("hidden");
+    if (skillPickOverlay) skillPickOverlay.classList.add("hidden");
+    selectPanel.classList.add("hidden");
+    buildPanel.classList.remove("hidden");
+    btnNextWave.disabled = false;
+    if (state.phase === "idle") {
+      btnNextWave.classList.remove("waiting");
+      btnNextWave.textContent = state.wave > 0 ? `开始第 ${state.wave + 1} 波` : "开始第 1 波";
+    } else if (state.phase === "countdown") {
+      btnNextWave.classList.add("waiting");
+      updateCountdownBtn();
+    } else {
+      btnNextWave.classList.remove("waiting");
+      btnNextWave.textContent = `战斗中 · 第 ${state.wave} 波`;
+      btnNextWave.disabled = true;
+    }
+    syncSpeedButtons();
+    renderSkillButtons();
+    updateBuildButtons();
+    updateHUD();
+    toast(`继续战斗 · 第 ${state.level} 关 · 第 ${state.wave} 波`, 2200);
+    return true;
+  }
+
+  function refreshContinueButton() {
+    if (!btnContinue) return;
+    const ok = hasRunSnapshot();
+    btnContinue.classList.toggle("hidden", !ok);
   }
 
   function refreshSelectPanel() {
@@ -1786,9 +2188,19 @@
     e.preventDefault();
     const { c, r, x, y } = pointerToCell(e);
 
-    if (state.skillAim === "meteor") {
-      castMeteorAt(x, y);
-      return;
+    if (state.skillAim) {
+      const aim = state.skillAim;
+      const def = SKILL_DEFS[aim];
+      if (def && def.aim === "point") {
+        castSkill(aim, x, y);
+        return;
+      }
+      if (def && def.aim === "enemy") {
+        const e = pickNearestEnemy(x, y, cellSize * 1.8);
+        if (!e) { toast("请点选一只怪"); return; }
+        castSkill(aim, x, y, e);
+        return;
+      }
     }
 
     const existing = towerAt(c, r);
@@ -1930,17 +2342,22 @@
       enterMergeMode();
     });
   }
-  if (btnSkillMeteor) {
-    btnSkillMeteor.addEventListener("click", () => {
+  if (btnSkillConfirm) {
+    btnSkillConfirm.addEventListener("click", () => {
       sfx("click");
-      beginMeteorAim();
-      updateSkillButtons();
+      confirmSkillPick();
     });
   }
-  if (btnSkillReinforce) {
-    btnSkillReinforce.addEventListener("click", () => {
+  if (btnSkillCancel) {
+    btnSkillCancel.addEventListener("click", () => cancelSkillPick());
+  }
+  if (btnContinue) {
+    btnContinue.addEventListener("click", () => {
       sfx("click");
-      castReinforce();
+      if (!restoreRunSnapshot()) {
+        toast("没有可继续的战斗");
+        refreshContinueButton();
+      }
     });
   }
 
@@ -1994,7 +2411,7 @@
       const maxLv = maxUnlocked(menuDiff);
       let lv = Number(startLevelInput && startLevelInput.value) || 1;
       lv = Math.max(1, Math.min(maxLv, Math.floor(lv)));
-      beginLevelRun(lv, menuDiff, menuMap);
+      openSkillPick(lv, menuDiff, menuMap);
     });
   }
 
@@ -2085,7 +2502,9 @@
       e.dead = true;
       e.hp = 0;
       state.kills++;
-      state.gold += e.reward;
+      let bounty = e.reward;
+      if (now < (state.goldTideUntil || 0)) bounty = Math.round(bounty * 1.5);
+      state.gold += bounty;
       const n = e.kind === "boss" ? 14 : e.kind === "tank" ? 10 : 7;
       spawnParticle(e.x, e.y, e.color, n);
       sfx("death", e.kind);
@@ -2164,9 +2583,9 @@
           if (state.waveWallStart == null) {
             state.waveWallStart = performance.now();
           }
-          state.enemies.push(
-            new Enemy(spec.kind, spec.speedMul, spec.hpMul, spec.reward)
-          );
+          const neo = new Enemy(spec.kind, spec.speedMul, spec.hpMul, spec.reward);
+          if (neo.kind === "boss") neo.spawnFlashUntil = gameNow + 0.3;
+          state.enemies.push(neo);
           // 终局重叠出场：Boss 后极短间隔
           if (state.wave === WAVES_PER_LEVEL) {
             state.spawnTimer = spec.kind === "boss" ? 0.2 : 0.28;
@@ -2179,8 +2598,13 @@
     }
 
     // 技能冷却
-    if (state.skillCd.meteor > 0) state.skillCd.meteor = Math.max(0, state.skillCd.meteor - dt);
-    if (state.skillCd.reinforce > 0) state.skillCd.reinforce = Math.max(0, state.skillCd.reinforce - dt);
+    if (state.skillCd) {
+      for (const id of Object.keys(state.skillCd)) {
+        if (state.skillCd[id] > 0) state.skillCd[id] = Math.max(0, state.skillCd[id] - dt);
+      }
+    }
+    // 技能按钮 CD 文案（轻量）
+    if ((Math.floor(gameNow * 4) % 2) === 0) updateSkillButtons();
 
     // 援军衰减
     for (const a of state.allies) {
@@ -2191,6 +2615,9 @@
     for (const e of state.enemies) {
       if (e.dead || e.escaped) continue;
       let spd = e.speed(now);
+      if (now < (state.timeSlowUntil || 0)) {
+        spd *= (e.kind === "boss" ? 0.65 : 0.4);
+      }
       // 援军拦截
       let blocked = false;
       for (const ally of state.allies) {
@@ -2495,7 +2922,7 @@
     }
 
     // 技能瞄准预览
-    if (state.skillAim === "meteor" && state.hoverCell) {
+    if (state.skillAim && SKILL_DEFS[state.skillAim] && SKILL_DEFS[state.skillAim].aim === "point" && state.hoverCell) {
       const hc = state.hoverCell;
       const p = cellCenter(hc.c, hc.r);
       ctx.beginPath();
@@ -3055,7 +3482,7 @@
     frost: { main: "#29b6f6", light: "#e1f5fe", glow: "rgba(129,212,250," },
   };
   function towerScale(t) {
-    return 0.8 + 0.12 * (t.level - 1) + 0.07 * ((t.star || 1) - 1);
+    return 0.74 + 0.09 * (t.level - 1) + 0.05 * ((t.star || 1) - 1);
   }
   function polyPath(cx, cy, rad, n, rot) {
     ctx.beginPath();
@@ -3339,36 +3766,90 @@
   }
 
   function drawEnemy(e) {
-    const rad = e.radius * cellSize;
-    const now = gameNow; // 与受击闪白/减速同一模拟时钟
-    const slowed = e.slowMul < 1 || now < e.freezeUntil;
+    const tier = e.visualTier || visualTierFor(e.kind);
+    const scale = e.drawScale || (tier === "boss" ? 1.75 : tier === "elite" ? 1.2 : tier === "heavy" ? 1.1 : 1);
+    const rad = e.radius * cellSize * scale;
+    const now = gameNow;
+    const slowed = e.slowMul < 1 || now < e.freezeUntil || now < (state.timeSlowUntil || 0);
     const frozen = now < e.freezeUntil;
     const flash = e.hitFlash && now < e.hitFlash;
+    const lift = e.yLift || (tier === "elite" ? 3 : 0);
+    const ex = e.x;
+    const ey = e.y - lift;
 
-    drawGroundShadow(e.x, e.y, rad * 0.95, rad * 0.8);
+    // Boss 入场红边闪 0.3s
+    if (tier === "boss" && e.spawnFlashUntil && now < e.spawnFlashUntil) {
+      const a = (e.spawnFlashUntil - now) / 0.3;
+      ctx.beginPath();
+      ctx.arc(ex, ey, rad + 10, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255,40,60,${0.75 * a})`;
+      ctx.lineWidth = 4;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(ex, ey, rad + 4, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(180,20,40,${0.2 * a})`;
+      ctx.fill();
+    }
+
+    drawGroundShadow(ex, ey + (tier === "boss" ? 4 : 0), rad * (tier === "boss" ? 1.15 : 0.95), rad * (tier === "boss" ? 1.0 : 0.8));
+
+    // 精英亮描边光环
+    if (tier === "elite" && !flash) {
+      ctx.beginPath();
+      ctx.arc(ex, ey, rad + 5, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255,236,179,0.55)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    // Boss 脚下阴影圈 + 高对比描边
+    if (tier === "boss") {
+      ctx.beginPath();
+      ctx.ellipse(ex, ey + rad * 0.55, rad * 1.15, rad * 0.35, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(40,0,20,0.35)";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(ex, ey, rad + 6, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(180,60,120,0.55)";
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+    }
 
     if (frozen) {
       ctx.beginPath();
-      ctx.arc(e.x, e.y, rad + 7, 0, Math.PI * 2);
+      ctx.arc(ex, ey, rad + 7, 0, Math.PI * 2);
       ctx.fillStyle = "rgba(224,247,250,0.35)";
       ctx.fill();
     }
 
     if (slowed) {
       ctx.beginPath();
-      ctx.arc(e.x, e.y, rad + 6, 0, Math.PI * 2);
+      ctx.arc(ex, ey, rad + 6, 0, Math.PI * 2);
       ctx.fillStyle = "rgba(129,212,250,0.22)";
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(e.x, e.y, rad + 3, 0, Math.PI * 2);
+      ctx.arc(ex, ey, rad + 3, 0, Math.PI * 2);
       ctx.strokeStyle = "rgba(179,229,252,0.65)";
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }
 
     ctx.save();
-    ctx.translate(e.x, e.y);
+    ctx.translate(ex, ey);
     if (e.angle != null) ctx.rotate(e.angle);
+
+    // 临时提高饱和：精英用更亮的 fill 覆盖
+    const savedColor = e.color;
+    const savedDark = e.colorDark;
+    if (tier === "elite" && !flash) {
+      e.color = saturateHex(e.color, 1.25);
+      e.colorDark = saturateHex(e.colorDark || e.color, 1.1);
+    } else if (tier === "boss" && !flash) {
+      e.color = "#6b4a3a";
+      e.colorDark = "#2a1018";
+    } else if (tier === "normal" && !flash) {
+      // 灰绿 / 原色偏灰
+      e.color = muteHex(e.color, 0.85);
+    }
 
     if (e.kind === "fast") drawEnemyFast(e, rad, flash, slowed);
     else if (e.kind === "tank") drawEnemyTank(e, rad, flash, slowed);
@@ -3381,9 +3862,119 @@
     else if (e.kind === "spawn") drawEnemySpawn(e, rad, flash, slowed);
     else drawEnemyNormal(e, rad, flash, slowed);
 
+    // 精英饰品
+    if (tier === "elite" && !flash) drawEliteOrnament(e, rad);
+    // Boss 冠铠已在 drawEnemyBoss；再加深紫描边强化
+    if (tier === "boss") {
+      ctx.beginPath();
+      ctx.arc(0, 0, rad * 1.02, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(200,40,100,0.65)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    e.color = savedColor;
+    e.colorDark = savedDark;
     ctx.restore();
-    drawEnemyHpBar(e, rad);
+    drawEnemyHpBar(e, rad, tier);
   }
+
+  function parseHex(h) {
+    const s = (h || "#888888").replace("#", "");
+    if (s.length !== 6) return [136, 136, 136];
+    return [parseInt(s.slice(0, 2), 16), parseInt(s.slice(2, 4), 16), parseInt(s.slice(4, 6), 16)];
+  }
+  function toHex(r, g, b) {
+    const c = (n) => Math.max(0, Math.min(255, n | 0)).toString(16).padStart(2, "0");
+    return `#${c(r)}${c(g)}${c(b)}`;
+  }
+  function saturateHex(hex, mul) {
+    let [r, g, b] = parseHex(hex);
+    const avg = (r + g + b) / 3;
+    r = avg + (r - avg) * mul;
+    g = avg + (g - avg) * mul;
+    b = avg + (b - avg) * mul;
+    return toHex(r, g, b);
+  }
+  function muteHex(hex, mul) {
+    let [r, g, b] = parseHex(hex);
+    const avg = (r + g + b) / 3;
+    r = avg + (r - avg) * mul;
+    g = avg + (g - avg) * mul;
+    b = avg + (b - avg) * mul;
+    return toHex(r * 0.92, g * 0.92, b * 0.88);
+  }
+
+  /** 精英饰品：角盔/翅焰/蛛纹/药瓶/残影 */
+  function drawEliteOrnament(e, rad) {
+    ctx.save();
+    if (e.kind === "shield") {
+      // 角盔
+      ctx.fillStyle = "#ffd54f";
+      ctx.beginPath();
+      ctx.moveTo(-rad * 0.55, -rad * 0.7);
+      ctx.lineTo(-rad * 0.35, -rad * 1.25);
+      ctx.lineTo(-rad * 0.15, -rad * 0.7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(rad * 0.15, -rad * 0.7);
+      ctx.lineTo(rad * 0.35, -rad * 1.25);
+      ctx.lineTo(rad * 0.55, -rad * 0.7);
+      ctx.closePath();
+      ctx.fill();
+    } else if (e.kind === "flyer") {
+      // 翅焰
+      const t = gameNow;
+      ctx.globalAlpha = 0.55 + Math.sin(t * 10) * 0.2;
+      ctx.fillStyle = "#ff8a65";
+      ctx.beginPath();
+      ctx.moveTo(-rad * 0.2, 0);
+      ctx.quadraticCurveTo(-rad * 1.4, -rad * 0.9, -rad * 0.5, rad * 0.2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-rad * 0.2, 0);
+      ctx.quadraticCurveTo(-rad * 1.4, rad * 0.9, -rad * 0.5, -rad * 0.2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    } else if (e.kind === "splitter") {
+      // 蛛纹
+      ctx.strokeStyle = "rgba(255,200,120,0.7)";
+      ctx.lineWidth = 1.4;
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(a) * rad * 0.95, Math.sin(a) * rad * 0.95);
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.arc(0, 0, rad * 0.45, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (e.kind === "healer") {
+      // 药瓶
+      ctx.fillStyle = "#aed581";
+      ctx.fillRect(rad * 0.55, -rad * 0.55, rad * 0.28, rad * 0.55);
+      ctx.fillStyle = "#fff59d";
+      ctx.fillRect(rad * 0.58, -rad * 0.7, rad * 0.22, rad * 0.18);
+      ctx.strokeStyle = "#33691e";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(rad * 0.55, -rad * 0.55, rad * 0.28, rad * 0.55);
+    } else if (e.kind === "blinker") {
+      // 残影
+      ctx.globalAlpha = 0.28;
+      ctx.fillStyle = "#e1bee7";
+      ctx.beginPath();
+      ctx.arc(-rad * 0.85, 0, rad * 0.55, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(-rad * 1.4, 0, rad * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  }
+
 
 
   function zFill(base, flash, slow) {
@@ -3983,11 +4574,13 @@
     ctx.fill();
   }
 
-    function drawEnemyHpBar(e, rad) {
+    function drawEnemyHpBar(e, rad, tier) {
+    tier = tier || e.visualTier || visualTierFor(e.kind);
+    const lift = e.yLift || (tier === "elite" ? 3 : 0);
     const bw = Math.max(rad * 2.4, 16);
-    const bh = e.kind === "boss" ? 5 : 4;
+    const bh = tier === "boss" ? 7 : tier === "elite" ? 5 : 4;
     const bx = e.x - bw / 2;
-    const by = e.y - rad - (e.kind === "boss" ? 14 : 10);
+    const by = e.y - lift - rad - (tier === "boss" ? 16 : 10);
     roundRectPath(bx - 1, by - 1, bw + 2, bh + 2, 2);
     ctx.fillStyle = "rgba(20,24,12,0.65)";
     ctx.fill();
@@ -4001,8 +4594,12 @@
       ctx.fillStyle = "rgba(220,240,180,0.3)";
       ctx.fillRect(bx + 1, by + 1, Math.max(0, bw * ratio - 2), 1.5);
     }
-    if (e.kind === "boss") {
-      ctx.strokeStyle = "rgba(180,200,100,0.55)";
+    if (tier === "boss") {
+      ctx.strokeStyle = "rgba(200,80,140,0.75)";
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(bx - 0.5, by - 0.5, bw + 1, bh + 1);
+    } else if (tier === "elite") {
+      ctx.strokeStyle = "rgba(255,224,130,0.45)";
       ctx.lineWidth = 1;
       ctx.strokeRect(bx - 0.5, by - 0.5, bw + 1, bh + 1);
     }

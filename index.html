@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#1a1610" />
   <title>路卫 — Coinpath Defense</title>
-  <link rel="stylesheet" href="styles.css?v=17" />
+  <link rel="stylesheet" href="styles.css?v=18" />
 </head>
 <body>
   <div id="app">
@@ -40,16 +40,7 @@
           <button type="button" class="speed-btn" data-speed="3">3×</button>
           <button type="button" class="speed-btn" data-speed="4">4×</button>
         </div>
-        <div class="skill-btns" role="group" aria-label="主动技能">
-          <button type="button" id="btn-skill-meteor" class="skill-btn" title="流星火雨">
-            <span class="skill-name">火雨</span>
-            <span class="skill-cd" id="skill-meteor-cd">就绪</span>
-          </button>
-          <button type="button" id="btn-skill-reinforce" class="skill-btn" title="援军">
-            <span class="skill-name">援军</span>
-            <span class="skill-cd" id="skill-reinforce-cd">就绪</span>
-          </button>
-        </div>
+        <div class="skill-btns" id="skill-btns" role="group" aria-label="主动技能"></div>
         <button type="button" id="btn-pause" class="hud-chip" aria-pressed="false" aria-label="暂停" title="暂停">暂停</button>
         <button type="button" id="btn-hud-menu" class="hud-chip ghost" aria-label="返回选关" title="返回选关">选关</button>
         <button type="button" id="btn-audio" class="hud-audio" aria-pressed="false" aria-label="音乐开启，点击静音" title="点击静音">音乐</button>
@@ -124,7 +115,22 @@
           <input type="number" id="start-level" min="1" max="1" value="1" inputmode="numeric" />
         </div>
         <p id="start-stage-hint" class="start-hint">地图阶 1</p>
-        <button type="button" class="action-btn primary" id="btn-start-game">出征</button>
+        <div class="start-actions">
+          <button type="button" class="action-btn primary" id="btn-start-game">出征</button>
+          <button type="button" class="action-btn accent hidden" id="btn-continue">继续战斗</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="skill-pick-overlay" class="hidden">
+      <div class="overlay-card skill-pick-card">
+        <h2>选择技能</h2>
+        <p class="pause-msg">本关从下方 <strong>3</strong> 个技能中挑选 <strong>2</strong> 个带入（已选 <span id="skill-pick-count">0</span>/2）</p>
+        <div id="skill-pick-options" class="skill-pick-options"></div>
+        <div class="end-actions">
+          <button type="button" class="action-btn primary" id="btn-skill-confirm" disabled>确认出征</button>
+          <button type="button" class="action-btn ghost" id="btn-skill-cancel">返回</button>
+        </div>
       </div>
     </div>
 
@@ -159,7 +165,7 @@
       </div>
     </div>
   </div>
-  <script src="audio.js?v=17"></script>
-  <script src="game.js?v=17"></script>
+  <script src="audio.js?v=18"></script>
+  <script src="game.js?v=18"></script>
 </body>
 </html>
