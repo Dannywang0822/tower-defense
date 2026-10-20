@@ -105,8 +105,16 @@
   ];
 
   function sceneSkinFor(stage) {
+    // 玩家在开始屏选定的地图皮肤优先；未选则按 stage 轮换（旧行为）
+    if (state && Number.isInteger(state.mapIndex) && SCENE_SKINS[state.mapIndex]) {
+      return SCENE_SKINS[state.mapIndex];
+    }
     const s = Math.max(1, stage | 0);
     return SCENE_SKINS[(s - 1) % SCENE_SKINS.length];
+  }
+  function skinForIndex(idx) {
+    const i = Math.max(0, Math.min(SCENE_SKINS.length - 1, idx | 0));
+    return SCENE_SKINS[i];
   }
 
 
@@ -505,6 +513,7 @@
   const btnResume = document.getElementById("btn-resume");
   const btnPauseMenu = document.getElementById("btn-pause-menu");
   const btnHudMenu = document.getElementById("btn-hud-menu");
+  const startMapBtns = document.getElementById("start-map-btns");
 
   // ---------- 状态 ----------
   let cellSize = 50;
@@ -513,6 +522,7 @@
 
   const state = {
     difficulty: "patrol",
+    mapIndex: 0, // 玩家所选地图皮肤（SCENE_SKINS 下标）
     level: 1,
     stage: 1,
     seed: 0,
@@ -572,6 +582,7 @@
         return {
           best: { patrol: 1, hold: 1, blood: 1, abyss: 1 },
           lastDiff: "patrol",
+          lastMap: 0,
           lastLevel: 1,
         };
       }
@@ -585,12 +596,14 @@
           abyss: Math.max(1, Math.min(TOTAL_LEVELS, Number(best.abyss) || 1)),
         },
         lastDiff: DIFFICULTIES[data.lastDiff] ? data.lastDiff : "patrol",
+        lastMap: Math.max(0, Math.min(SCENE_SKINS.length - 1, Number(data.lastMap) || 0)),
         lastLevel: Math.max(1, Math.min(TOTAL_LEVELS, Number(data.lastLevel) || 1)),
       };
     } catch (_) {
       return {
         best: { patrol: 1, hold: 1, blood: 1, abyss: 1 },
         lastDiff: "patrol",
+        lastMap: 0,
         lastLevel: 1,
       };
     }
@@ -601,6 +614,7 @@
     const next = {
       best: { ...cur.best, ...(patch.best || {}) },
       lastDiff: patch.lastDiff != null ? patch.lastDiff : cur.lastDiff,
+      lastMap: patch.lastMap != null ? patch.lastMap : cur.lastMap,
       lastLevel: patch.lastLevel != null ? patch.lastLevel : cur.lastLevel,
     };
     try {
@@ -645,6 +659,9 @@
     const prevStage = state.stage;
     state.difficulty = diffKey;
     state.level = level;
+    if (opts.mapIndex != null && Number.isInteger(opts.mapIndex)) {
+      state.mapIndex = Math.max(0, Math.min(SCENE_SKINS.length - 1, opts.mapIndex));
+    }
     const built = buildPathForLevel(level, diffKey);
     state.stage = built.stage;
     state.seed = built.seed;
@@ -652,8 +669,10 @@
     if (typeof rebuildPathPixels === "function" && cellSize) {
       rebuildPathPixels();
     }
+    // 阶数升级仅 toast，不覆盖玩家所选地图皮肤
     if (opts.toastMap && built.stage > (opts.prevStage || prevStage)) {
-      toast(`地图升级 · 第 ${built.stage} 阶`, 2600);
+      const skinName = (SCENE_SKINS[state.mapIndex] || SCENE_SKINS[0]).name;
+      toast(`地图阶升级 · 第 ${built.stage} 阶 · ${skinName}`, 2600);
     }
     return built;
   }
@@ -1131,12 +1150,13 @@
       showStartMenu();
       return;
     }
-    beginLevelRun(state.level, state.difficulty);
+    beginLevelRun(state.level, state.difficulty, state.mapIndex);
   }
 
-  function beginLevelRun(level, diffKey) {
+  function beginLevelRun(level, diffKey, mapIndex) {
     clearLevelBoard();
-    setupLevel(level, diffKey);
+    const mi = mapIndex != null ? mapIndex : menuMap;
+    setupLevel(level, diffKey, { mapIndex: Math.max(0, Math.min(SCENE_SKINS.length - 1, mi | 0)) });
     Object.assign(state, {
       lives: startingLives(),
       gold: startingGold(),
@@ -1170,8 +1190,8 @@
     syncSpeedButtons();
     updateBuildButtons();
     updateHUD();
-    persistSave({ lastDiff: diffKey, lastLevel: level });
-    toast(`第 ${level} 关 · ${diffDef().name} · 地图阶 ${state.stage}`, 2200);
+    persistSave({ lastDiff: diffKey, lastMap: state.mapIndex, lastLevel: level });
+    toast(`第 ${level} 关 · ${diffDef().name} · ${(SCENE_SKINS[state.mapIndex] || SCENE_SKINS[0]).name}`, 2200);
   }
 
   function showStartMenu() {
@@ -1224,20 +1244,30 @@
       btnPause.setAttribute("aria-pressed", "false");
       btnPause.textContent = "暂停";
     }
-    // 保留 localStorage 存档（best unlock / lastDiff / lastLevel）
+    // 保留 localStorage 存档（best unlock / lastDiff / lastMap / lastLevel）
     showStartMenu();
     sfx("click");
   }
 
 
   let menuDiff = "patrol";
+  let menuMap = 0;
 
   function refreshStartMenu() {
     const save = loadSave();
     if (!DIFFICULTIES[menuDiff]) menuDiff = save.lastDiff;
+    if (!Number.isInteger(menuMap) || menuMap < 0 || menuMap >= SCENE_SKINS.length) {
+      menuMap = save.lastMap | 0;
+    }
     if (startDiffBtns) {
       startDiffBtns.querySelectorAll("[data-diff]").forEach((btn) => {
         btn.classList.toggle("active", btn.dataset.diff === menuDiff);
+      });
+    }
+    if (startMapBtns) {
+      startMapBtns.querySelectorAll("[data-map]").forEach((btn) => {
+        const i = Number(btn.dataset.map);
+        btn.classList.toggle("active", i === menuMap);
       });
     }
     const maxLv = maxUnlocked(menuDiff);
@@ -1253,8 +1283,9 @@
     const st = mapStage(lv);
     if (startStageHint) {
       const d = DIFFICULTIES[menuDiff];
+      const skin = SCENE_SKINS[menuMap] || SCENE_SKINS[0];
       startStageHint.textContent =
-        `地图阶 ${st} · ${sceneSkinFor(st).name} · 生命 ${d.lives} · 开局金 ${START_GOLD_BASE + d.goldBonus} · 怪血×${d.hp}`;
+        `地图阶 ${st}（路径难度）· ${skin.name} · 生命 ${d.lives} · 开局金 ${START_GOLD_BASE + d.goldBonus} · 怪血×${d.hp}`;
     }
   }
 
@@ -1490,6 +1521,15 @@
       refreshStartMenu();
     });
   }
+  if (startMapBtns) {
+    startMapBtns.addEventListener("click", (ev) => {
+      const btn = ev.target.closest("[data-map]");
+      if (!btn) return;
+      sfx("click");
+      menuMap = Number(btn.dataset.map) | 0;
+      refreshStartMenu();
+    });
+  }
   if (startLevelInput) {
     startLevelInput.addEventListener("input", () => refreshStartMenu());
   }
@@ -1499,7 +1539,7 @@
       const maxLv = maxUnlocked(menuDiff);
       let lv = Number(startLevelInput && startLevelInput.value) || 1;
       lv = Math.max(1, Math.min(maxLv, Math.floor(lv)));
-      beginLevelRun(lv, menuDiff);
+      beginLevelRun(lv, menuDiff, menuMap);
     });
   }
 
@@ -3287,7 +3327,8 @@
   requestAnimationFrame(() => requestAnimationFrame(resize));
   const save0 = loadSave();
   menuDiff = save0.lastDiff;
-  setupLevel(save0.lastLevel || 1, menuDiff);
+  menuMap = save0.lastMap | 0;
+  setupLevel(save0.lastLevel || 1, menuDiff, { mapIndex: menuMap });
   resize();
   updateHUD();
   showStartMenu();
@@ -3320,5 +3361,6 @@
     returnToDifficultySelect,
     sceneSkinFor,
     SCENE_SKINS,
+    get menuMap() { return menuMap; },
   };
 })();

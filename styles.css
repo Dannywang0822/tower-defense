@@ -539,9 +539,10 @@ html, body {
   padding: 16px;
   backdrop-filter: blur(5px);
   -webkit-backdrop-filter: blur(5px);
+  overflow-y: auto;
 }
 #start-overlay.hidden { display: none; }
-.start-card { max-width: 360px; }
+.start-card { max-width: 380px; width: min(380px, 100%); margin: auto; }
 .start-card h2 {
   font-size: 28px;
   color: var(--gold);
@@ -580,6 +581,36 @@ html, body {
   box-shadow: 0 0 0 1px rgba(212, 175, 85, 0.35) inset, 0 0 12px rgba(212, 175, 85, 0.2);
   background: linear-gradient(180deg, #3a3020, #241e14);
 }
+
+/* ---- v15 地图风格选择 ---- */
+.map-btns {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+.map-btn {
+  appearance: none;
+  border: 1px solid var(--panel-border);
+  background: rgba(40, 34, 24, 0.9);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 8px 2px;
+  font-size: 12px;
+  cursor: pointer;
+  min-height: 40px;
+  line-height: 1.2;
+}
+.map-btn.active {
+  border-color: var(--gold);
+  color: var(--gold);
+  box-shadow: 0 0 0 1px rgba(212, 175, 85, 0.35) inset, 0 0 12px rgba(212, 175, 85, 0.2);
+  background: linear-gradient(180deg, #3a3020, #241e14);
+}
+.map-btn[data-decor="brick"].active { border-color: #d4af55; color: #e8c96a; }
+.map-btn[data-decor="fog"].active { border-color: #9aa0c0; color: #c8cce8; }
+.map-btn[data-decor="snow"].active { border-color: #8ec8e8; color: #b8e0f8; }
+.map-btn[data-decor="lava"].active { border-color: #e07040; color: #ffb080; }
+.map-btn[data-decor="toxic"].active { border-color: #7cbc60; color: #b0e890; }
 .level-row { display: flex; gap: 8px; }
 #start-level {
   flex: 1;
@@ -603,6 +634,7 @@ html, body {
 
 @media (max-width: 460px) {
   .diff-btns { grid-template-columns: repeat(2, 1fr); }
+  .map-btns { grid-template-columns: repeat(3, 1fr); }
   #hud-diff-wrap { display: none; }
 }
 
