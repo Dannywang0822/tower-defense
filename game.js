@@ -1717,7 +1717,6 @@
 
   function showStartMenu() {
     state.phase = "menu";
-    menuTrackSource = "chapter";
     seedMenuLevel = true;
     state.ended = false;
     state.paused = false;
@@ -1791,8 +1790,7 @@
   let menuDiff = "patrol";
   let menuMap = 0;
   let seedMenuLevel = true;
-  // 选关时最近一次改的是关卡还是地图皮肤。地图皮肤各自对应一条章节曲。
-  let menuTrackSource = "chapter";
+  // 地图皮肤 → 配乐。毒沼与暮城同用尘道。进战斗后仍跟这块皮肤，不跟关卡章节。
   const SKIN_TRACKS = ["dust", "night", "frost", "rift", "dust"];
 
   function refreshStartMenu() {
@@ -1849,16 +1847,25 @@
     return state.stage || 1;
   }
 
-  function resolveBgmTrack() {
-    if (state.phase === "menu" && !state.pendingStart && menuTrackSource === "map") {
-      return SKIN_TRACKS[menuMap] || "dust";
+  function selectedMapIndex() {
+    if (state.pendingStart && state.pendingStart.map != null) {
+      const m = state.pendingStart.map | 0;
+      if (m >= 0 && m < SKIN_TRACKS.length) return m;
     }
-    return chapterForStage(activeStage()).track;
+    if (state.phase !== "menu" && Number.isInteger(state.mapIndex)) {
+      const m = state.mapIndex;
+      if (m >= 0 && m < SKIN_TRACKS.length) return m;
+    }
+    const m = menuMap | 0;
+    return m >= 0 && m < SKIN_TRACKS.length ? m : 0;
+  }
+
+  function resolveBgmTrack() {
+    return SKIN_TRACKS[selectedMapIndex()] || "dust";
   }
 
   function activeChapter() {
-    const id = resolveBgmTrack();
-    return CHAPTERS.find((c) => c.id === id) || chapterForStage(activeStage());
+    return chapterForStage(activeStage());
   }
 
   function syncAudio() {
@@ -1867,7 +1874,7 @@
     const ch = activeChapter();
     if (document.body) document.body.dataset.chapter = ch.id;
     try {
-      if (api.setChapter) api.setChapter(ch.track);
+      if (api.setChapter) api.setChapter(resolveBgmTrack());
       if (api.setPaused) api.setPaused(!!state.paused && state.phase !== "menu" && !state.pendingStart);
     } catch (_) {}
   }
@@ -3071,15 +3078,11 @@
       if (!btn) return;
       sfx("click");
       menuMap = Number(btn.dataset.map) | 0;
-      menuTrackSource = "map";
       refreshStartMenu();
     });
   }
   if (startLevelInput) {
-    startLevelInput.addEventListener("input", () => {
-      menuTrackSource = "chapter";
-      refreshStartMenu();
-    });
+    startLevelInput.addEventListener("input", () => refreshStartMenu());
   }
   if (btnStartGame) {
     btnStartGame.addEventListener("click", () => {
