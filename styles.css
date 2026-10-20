@@ -644,6 +644,21 @@ body[data-decor="snow"] #stage-wrap { border-color: #7f93a8; }
 body[data-decor="lava"] #stage-wrap { border-color: #8a4a32; }
 body[data-decor="toxic"] #stage-wrap { border-color: #5e7a48; }
 
+/* v20: 章节主题压过地图皮的边框，雾在画布上另画 */
+body[data-chapter="dust"] #hud,
+body[data-chapter="dust"] #stage-wrap { border-color: #a6844e; }
+body[data-chapter="frost"] #hud,
+body[data-chapter="frost"] #stage-wrap { border-color: #7eb8c4; }
+body[data-chapter="rift"] #hud,
+body[data-chapter="rift"] #stage-wrap { border-color: #7e57c2; }
+body[data-chapter="night"] #hud,
+body[data-chapter="night"] #stage-wrap { border-color: #8e3a3a; }
+body[data-chapter="dust"] .ch-name { color: #e6c48a; }
+body[data-chapter="frost"] .ch-name { color: #d7f3f7; }
+body[data-chapter="rift"] .ch-name { color: #d1c4e9; }
+body[data-chapter="night"] .ch-name { color: #ffab91; }
+.ch-name { font-weight: 700; }
+
 
 /* ---- v16 技能 / 合成 / 专精 ---- */
 .skill-btns {
