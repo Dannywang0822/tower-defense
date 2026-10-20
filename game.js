@@ -155,17 +155,153 @@
     },
   ];
 
-  function sceneSkinFor(stage) {
-    // 玩家在开始屏选定的地图皮肤优先；未选则按 stage 轮换（旧行为）
-    if (state && Number.isInteger(state.mapIndex) && SCENE_SKINS[state.mapIndex]) {
-      return SCENE_SKINS[state.mapIndex];
-    }
+  /**
+   * 章节世界：stage 仍是 floor((level-1)/30)+1，不改千关生成。
+   * 前 4 章有独立地貌；之后按 4 章循环并加「·周次」。
+   * 地貌色由章节决定；开始屏地图只改饰物（砖/雾/雪/熔/沼）。
+   * 通关解锁的「章节色」是可叠加的妆点，不替换章节名与首领。
+   */
+  const CHAPTERS = [
+    {
+      slot: 1, name: "荒原哨站", short: "荒原",
+      sky: ["#3a3424", "#241c14", "#14110c"],
+      tileEven: "#3c3424", tileOdd: "#4a3c28",
+      pathFill: "#2a2416",
+      pathOuter: "rgba(150,130,70,0.24)", pathEdge: "#5c4a30", pathMid: "#7a6840",
+      pathInner: "rgba(196,176,96,0.32)", pathDash: "rgba(214,190,110,0.42)",
+      accent: "rgba(210,180,100,0.9)", vignette: 0.34, decor: "dust",
+      monster: "#a89060", monsterDark: "#4a3c22",
+      bossName: "尘骸督军", bossColor: "#a68448", bossDark: "#3a2a14",
+      accentHex: "#e6c878",
+      phases: [
+        { phase: 2, at: 0.62, id: "shield", shieldFrac: 0.28, toast: "扬起尘骸护盾" },
+        { phase: 3, at: 0.32, id: "summon", toast: "尘暴召来散骸", adds: [{ kind: "fast", n: 3, hpFrac: 0.07 }] },
+      ],
+    },
+    {
+      slot: 2, name: "雾港码头", short: "雾港",
+      sky: ["#243038", "#161e26", "#0c1218"],
+      tileEven: "#1e2a32", tileOdd: "#26343e",
+      pathFill: "#141c22",
+      pathOuter: "rgba(130,160,180,0.24)", pathEdge: "#3a4c58", pathMid: "#5a7080",
+      pathInner: "rgba(186,206,220,0.28)", pathDash: "rgba(206,220,230,0.38)",
+      accent: "rgba(186,206,220,0.9)", vignette: 0.42, decor: "fog",
+      monster: "#8aa0b0", monsterDark: "#2c3c48",
+      bossName: "雾锚巨骸", bossColor: "#7e96a8", bossDark: "#1a2832",
+      accentHex: "#c5d6e2",
+      phases: [
+        { phase: 2, at: 0.66, id: "laneswitch", toast: "潮闸切换航速" },
+        { phase: 3, at: 0.34, id: "summon", toast: "浓雾里掠出飞影", adds: [{ kind: "flyer", n: 2, hpFrac: 0.09 }] },
+      ],
+    },
+    {
+      slot: 3, name: "熔城裂隙", short: "熔城",
+      sky: ["#3a1810", "#220e0c", "#120806"],
+      tileEven: "#321812", tileOdd: "#3e2016",
+      pathFill: "#1c0e0a",
+      pathOuter: "rgba(230,90,40,0.24)", pathEdge: "#5a2c20", pathMid: "#8a4030",
+      pathInner: "rgba(255,150,80,0.34)", pathDash: "rgba(255,186,100,0.42)",
+      accent: "rgba(255,150,80,0.92)", vignette: 0.38, decor: "lava",
+      monster: "#d07048", monsterDark: "#4a2418",
+      bossName: "熔核领主", bossColor: "#e06830", bossDark: "#3a140c",
+      accentHex: "#ffb080",
+      phases: [
+        { phase: 2, at: 0.60, id: "enrage", aura: 1.22, self: 1.18, toast: "熔怒光环点燃近处" },
+        { phase: 3, at: 0.30, id: "regen", regen: 0.02, dur: 5.5, toast: "熔核回涌并召卫", adds: [{ kind: "tank", n: 2, hpFrac: 0.1 }] },
+      ],
+    },
+    {
+      slot: 4, name: "霜冠高原", short: "霜冠",
+      sky: ["#243848", "#183044", "#101e2c"],
+      tileEven: "#243848", tileOdd: "#2e4860",
+      pathFill: "#162838",
+      pathOuter: "rgba(200,226,246,0.26)", pathEdge: "#4a6e88", pathMid: "#7aa0ba",
+      pathInner: "rgba(232,246,255,0.4)", pathDash: "rgba(255,255,255,0.48)",
+      accent: "rgba(220,240,255,0.92)", vignette: 0.26, decor: "snow",
+      monster: "#c5dff0", monsterDark: "#2a4458",
+      bossName: "霜冕尸王", bossColor: "#d7ecf8", bossDark: "#1a3044",
+      accentHex: "#e7f4ff",
+      phases: [
+        { phase: 2, at: 0.64, id: "shield", shieldFrac: 0.30, shieldRegen: 0.012, toast: "霜冕护盾缓缓再生" },
+        { phase: 3, at: 0.30, id: "frostpulse", toast: "霜冠凝滞周围城塔", adds: [{ kind: "spawn", n: 3, hpFrac: 0.06 }] },
+      ],
+    },
+  ];
+
+  function chapterOf(stage) {
     const s = Math.max(1, stage | 0);
-    return SCENE_SKINS[(s - 1) % SCENE_SKINS.length];
+    const idx = (s - 1) % CHAPTERS.length;
+    const loop = Math.floor((s - 1) / CHAPTERS.length);
+    const base = CHAPTERS[idx];
+    return {
+      ...base,
+      stage: s,
+      loop,
+      displayName: loop === 0 ? base.name : `${base.name}·${loop + 1}`,
+    };
+  }
+
+  function mixHex(a, b, t) {
+    const pa = parseHex(a);
+    const pb = parseHex(b);
+    return toHex(
+      pa[0] + (pb[0] - pa[0]) * t,
+      pa[1] + (pb[1] - pa[1]) * t,
+      pa[2] + (pb[2] - pa[2]) * t
+    );
+  }
+
+  function sceneSkinFor(stage) {
+    const s = Math.max(1, (stage || (state && state.stage) || 1) | 0);
+    const ch = chapterOf(s);
+    const player = (state && Number.isInteger(state.mapIndex) && SCENE_SKINS[state.mapIndex])
+      ? SCENE_SKINS[state.mapIndex]
+      : SCENE_SKINS[(s - 1) % SCENE_SKINS.length];
+    const skin = {
+      id: "chapter_" + ch.slot,
+      name: ch.displayName,
+      chapterName: ch.displayName,
+      chapterShort: ch.short,
+      chapterSlot: ch.slot,
+      sky: ch.sky.slice(),
+      tileEven: ch.tileEven,
+      tileOdd: ch.tileOdd,
+      pathFill: ch.pathFill,
+      pathOuter: ch.pathOuter,
+      pathEdge: ch.pathEdge,
+      pathMid: ch.pathMid,
+      pathInner: ch.pathInner,
+      pathDash: ch.pathDash,
+      accent: ch.accent,
+      vignette: ch.vignette,
+      // 饰物仍跟玩家地图；氛围粒子/入口跟章节
+      decor: player.decor,
+      chapterDecor: ch.decor,
+      mapName: player.name,
+      accentHex: ch.accentHex,
+      tintName: "",
+    };
+    const tint = state && state.tintChapter | 0;
+    if (tint >= 1 && tint <= CHAPTERS.length && tint !== ch.slot) {
+      const extra = CHAPTERS[tint - 1];
+      const k = 0.42;
+      skin.sky = skin.sky.map((c, i) => mixHex(c, extra.sky[i] || extra.sky[0], k));
+      skin.tileEven = mixHex(skin.tileEven, extra.tileEven, k);
+      skin.tileOdd = mixHex(skin.tileOdd, extra.tileOdd, k);
+      skin.pathFill = mixHex(skin.pathFill, extra.pathFill, k);
+      skin.pathEdge = mixHex(skin.pathEdge, extra.pathEdge, k);
+      skin.pathMid = mixHex(skin.pathMid, extra.pathMid, k);
+      skin.tintName = extra.short;
+    }
+    return skin;
   }
   function skinForIndex(idx) {
     const i = Math.max(0, Math.min(SCENE_SKINS.length - 1, idx | 0));
     return SCENE_SKINS[i];
+  }
+
+  function atmosphereDecor(skin) {
+    return (skin && skin.chapterDecor) || (skin && skin.decor) || "brick";
   }
 
 
@@ -510,7 +646,9 @@
       if (milestoneBoss && g.kind !== "boss") {
         count = Math.max(1, Math.round(count * 1.2));
       }
-      return { kind: g.kind, count, speedMul, hpMul, reward };
+      // 章节终波：只替换 Boss 行为，血量公式保持原里程碑乘子
+      const chapterBoss = milestoneBoss && g.kind === "boss";
+      return { kind: g.kind, count, speedMul, hpMul, reward, chapterBoss };
     });
 
     return plan;
@@ -577,6 +715,13 @@
   const btnSkillConfirm = document.getElementById("btn-skill-confirm");
   const btnSkillCancel = document.getElementById("btn-skill-cancel");
   const btnContinue = document.getElementById("btn-continue");
+  const elChapter = document.getElementById("hud-chapter");
+  const startChapterEl = document.getElementById("start-chapter");
+  const startTintBtns = document.getElementById("start-tint-btns");
+  const btnCodex = document.getElementById("btn-codex");
+  const codexOverlay = document.getElementById("codex-overlay");
+  const codexList = document.getElementById("codex-list");
+  const btnCodexClose = document.getElementById("btn-codex-close");
 
   // ---------- 状态 ----------
   let cellSize = 50;
@@ -623,6 +768,8 @@
     timeSlowUntil: 0,
     goldTideUntil: 0,
     pendingStart: null, // {level,diff,map} while picking skills
+    tintChapter: 0, // 0=不叠妆点；1–4=已解锁章节色
+    drag: null,
   };
 
   /** 模拟时钟（秒），随倍速推进；慢速/闪白/弹道寿命用它，避免墙钟与倍速错位 */
@@ -659,10 +806,15 @@
           lastDiff: "patrol",
           lastMap: 0,
           lastLevel: 1,
+          lastTint: 0,
+          discovered: [],
         };
       }
       const data = JSON.parse(raw);
       const best = data.best || {};
+      const discovered = Array.isArray(data.discovered)
+        ? data.discovered.filter((id) => typeof id === "string")
+        : [];
       return {
         best: {
           patrol: Math.max(1, Math.min(TOTAL_LEVELS, Number(best.patrol) || 1)),
@@ -673,6 +825,8 @@
         lastDiff: DIFFICULTIES[data.lastDiff] ? data.lastDiff : "patrol",
         lastMap: Math.max(0, Math.min(SCENE_SKINS.length - 1, Number(data.lastMap) || 0)),
         lastLevel: Math.max(1, Math.min(TOTAL_LEVELS, Number(data.lastLevel) || 1)),
+        lastTint: Math.max(0, Math.min(CHAPTERS.length, Number(data.lastTint) || 0)),
+        discovered,
       };
     } catch (_) {
       return {
@@ -680,6 +834,8 @@
         lastDiff: "patrol",
         lastMap: 0,
         lastLevel: 1,
+        lastTint: 0,
+        discovered: [],
       };
     }
   }
@@ -691,6 +847,8 @@
       lastDiff: patch.lastDiff != null ? patch.lastDiff : cur.lastDiff,
       lastMap: patch.lastMap != null ? patch.lastMap : cur.lastMap,
       lastLevel: patch.lastLevel != null ? patch.lastLevel : cur.lastLevel,
+      lastTint: patch.lastTint != null ? patch.lastTint : (cur.lastTint || 0),
+      discovered: patch.discovered != null ? patch.discovered : (cur.discovered || []),
     };
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify(next));
@@ -704,6 +862,38 @@
     const cleared = save.best[diffKey] || 1;
     // 约定：best 存「最高可达关卡号」（通关 L 后 best=min(1000,L+1)，初始 1）
     return Math.max(1, Math.min(TOTAL_LEVELS, cleared));
+  }
+
+  function highestUnlockedLevel() {
+    const save = loadSave();
+    let m = 1;
+    for (const k of Object.keys(DIFFICULTIES)) m = Math.max(m, save.best[k] || 1);
+    return m;
+  }
+
+  /** 章节色 N：到达该章即可用（第 1 章默认开放，通关第 1 章后开放雾港，依此类推） */
+  function tintUnlocked(slot) {
+    const n = slot | 0;
+    if (n <= 1) return true;
+    if (n > CHAPTERS.length) return false;
+    return highestUnlockedLevel() >= (n - 1) * 30 + 1;
+  }
+
+  function recipesUnlockedGlobal() {
+    return highestUnlockedLevel() >= 31;
+  }
+
+  function recipeKnown(id) {
+    if (recipesUnlockedGlobal()) return true;
+    const save = loadSave();
+    return (save.discovered || []).includes(id);
+  }
+
+  function discoverEvo(id) {
+    const save = loadSave();
+    const cur = save.discovered || [];
+    if (cur.includes(id)) return;
+    persistSave({ discovered: cur.concat(id) });
   }
 
   function recordLevelClear(diffKey, level) {
@@ -746,8 +936,9 @@
     }
     // 阶数升级仅 toast，不覆盖玩家所选地图皮肤
     if (opts.toastMap && built.stage > (opts.prevStage || prevStage)) {
+      const ch = chapterOf(built.stage);
       const skinName = (SCENE_SKINS[state.mapIndex] || SCENE_SKINS[0]).name;
-      toast(`地图阶升级 · 第 ${built.stage} 阶 · ${skinName}`, 2600);
+      toast(`进入第 ${built.stage} 章 · ${ch.displayName} · 饰物 ${skinName}`, 2600);
     }
     return built;
   }
@@ -942,6 +1133,119 @@
     return state.towers.some((t) => t.shatterBonus);
   }
 
+  /**
+   * 进化配方：拖材料到 3★ 目标。数值在 refresh() 里叠在 towerStats 之上，
+   * 不改未进化塔的 towerStats。
+   * 强度大约 +15%～25%，或一条明确的独特功能。
+   */
+  const EVO_DEFS = {
+    frostarrow: {
+      id: "frostarrow", name: "霜矢哨", base: "arrow",
+      hint: "3★ 箭（任意专精） + ≥2★ 霜塔",
+      blurb: "箭矢附带 0.8 秒减速，伤害 +15%",
+    },
+    siege: {
+      id: "siege", name: "破城臼", base: "cannon",
+      hint: "3★ 炮（任意专精） + 另一座 ≥2★ 炮",
+      blurb: "溅射半径 +35%，对坦克额外 ×1.35，伤害 +12%",
+    },
+    perma: {
+      id: "perma", name: "永冻塔", base: "frost",
+      hint: "3★ 霜（冰封） + ≥2★ 箭",
+      blurb: "减速上限提高，击杀触发冰爆",
+    },
+    skybow: {
+      id: "skybow", name: "连天弩", base: "arrow",
+      hint: "3★ 箭（连弩） + 另一座同星箭",
+      blurb: "射速提高、同时 4 矢，总输出约 +25%",
+    },
+  };
+
+  function applyEvoStats(t) {
+    const def = EVO_DEFS[t.evo];
+    t.evoName = "";
+    t.tankBonus = 0;
+    t.iceBurst = false;
+    if (!def) {
+      t.evo = null;
+      return;
+    }
+    t.evoName = def.name;
+    t.name = def.name;
+    if (t.evo === "frostarrow") {
+      t.damage = Math.round(t.damage * 1.15 * 10) / 10;
+      t.slow = 0.28;
+      t.slowDur = 0.8;
+    } else if (t.evo === "siege") {
+      t.damage = Math.round(t.damage * 1.12 * 10) / 10;
+      t.splash = (t.splash || 1.2) * 1.35;
+      t.tankBonus = 1.35;
+    } else if (t.evo === "perma") {
+      t.damage = Math.round(t.damage * 1.12 * 10) / 10;
+      t.slow = Math.min(0.62, (t.slow || 0) + 0.12);
+      t.iceBurst = true;
+    } else if (t.evo === "skybow") {
+      t.rate *= 1.12;
+      t.multiTarget = 4;
+      t.damage = Math.round(t.damage * 0.84 * 10) / 10;
+    }
+  }
+
+  function matchRecipe(target, src) {
+    if (!target || !src || target === src) return null;
+    if (target.evo || src.evo) return null;
+    if ((target.star || 1) < 3) return null;
+    if (target.type === "arrow" && target.branch === "rapid" &&
+        src.type === "arrow" && (src.star || 1) === (target.star || 1)) {
+      return EVO_DEFS.skybow;
+    }
+    if (target.type === "arrow" && src.type === "frost" && (src.star || 1) >= 2) {
+      return EVO_DEFS.frostarrow;
+    }
+    if (target.type === "cannon" && src.type === "cannon" && (src.star || 1) >= 2) {
+      return EVO_DEFS.siege;
+    }
+    if (target.type === "frost" && target.branch === "freeze" &&
+        src.type === "arrow" && (src.star || 1) >= 2) {
+      return EVO_DEFS.perma;
+    }
+    return null;
+  }
+
+  function evolveMissReason(src, dst) {
+    if (!src || !dst || src === dst) return "";
+    if (src.evo || dst.evo) return "进化塔不能再合成，也不能当材料";
+    if ((dst.star || 1) >= 3 && dst.type === "arrow" && src.type === "frost" && (src.star || 1) < 2) {
+      return "霜矢哨需要 ≥2★ 霜塔";
+    }
+    if ((dst.star || 1) >= 3 && dst.type === "cannon" && src.type === "cannon" && (src.star || 1) < 2) {
+      return "破城臼需要另一座 ≥2★ 炮塔";
+    }
+    if ((dst.star || 1) >= 3 && dst.type === "frost" && src.type === "arrow") {
+      if (dst.branch !== "freeze") return "永冻塔需要冰封专精的 3★ 霜塔";
+      if ((src.star || 1) < 2) return "永冻塔需要 ≥2★ 箭塔";
+    }
+    if ((dst.star || 1) >= 3 && dst.type === "arrow" && src.type === "arrow") {
+      if (dst.branch !== "rapid") return "连天弩要把材料箭拖到 3★ 连弩上";
+      if ((src.star || 1) !== (dst.star || 1)) return "连天弩需要另一座同星箭塔";
+    }
+    return "";
+  }
+
+  function evoHintsFor(t) {
+    if (!t || t.evo || (t.star || 1) < 3) return [];
+    const out = [];
+    if (t.type === "arrow") {
+      out.push("霜矢哨：把 ≥2★ 霜塔拖到此塔");
+      if (t.branch === "rapid") out.push("连天弩：把另一座 3★ 箭拖到此塔");
+    } else if (t.type === "cannon") {
+      out.push("破城臼：把另一座 ≥2★ 炮拖到此塔");
+    } else if (t.type === "frost" && t.branch === "freeze") {
+      out.push("永冻塔：把 ≥2★ 箭拖到此塔");
+    }
+    return out;
+  }
+
   // ---------- 实体 ----------
   class Tower {
     constructor(type, c, r, opts = {}) {
@@ -953,6 +1257,7 @@
       this.branch = opts.branch || null;
       this.invested = opts.invested != null ? opts.invested : TOWER_DEFS[type].cost;
       this.mergePips = opts.mergePips != null ? opts.mergePips : 0;
+      this.evo = opts.evo || null;
       const p = cellCenter(c, r);
       this.x = p.x;
       this.y = p.y;
@@ -964,7 +1269,8 @@
     refresh() {
       const stats = towerStats(this.type, this.level, this.star, this.branch);
       Object.assign(this, stats);
-      // invested 由建造/升级/合成维护，不被 stats 覆盖
+      // invested / evo 由建造、升级、合成、进化维护，不被 stats 覆盖
+      applyEvoStats(this);
     }
     upgrade() {
       if (this.level >= 3) return false;
@@ -982,6 +1288,7 @@
     }
     displayName() {
       const stars = "★".repeat(this.star) + "☆".repeat(3 - this.star);
+      if (this.evoName) return `${this.evoName} ${stars} Lv.${this.level}`;
       const br = this.branchName ? ` · ${this.branchName}` : "";
       return `${this.name} ${stars} Lv.${this.level}${br}`;
     }
@@ -1079,6 +1386,7 @@
         this.drawScale = 1.0;
         this.yLift = 0;
       }
+      applyMonsterVibe(this);
       const p = posOnPath(0);
       this.x = p.x;
       this.y = p.y;
@@ -1087,7 +1395,7 @@
     speed(now) {
       if (now < this.freezeUntil) return 0;
       const slow = now < this.slowUntil ? this.slowMul : 1;
-      return this.baseSpeed * slow;
+      return this.baseSpeed * slow * (this.phaseSpeedMul || 1);
     }
     applySlow(amount, dur, now) {
       const mul = 1 - amount;
@@ -1117,6 +1425,129 @@
     }
   }
 
+  function applyMonsterVibe(e) {
+    if (!e) return;
+    const ch = chapterOf((state && state.stage) || 1);
+    if (e.color) e.color = mixHex(e.color, ch.monster, e.kind === "boss" ? 0.5 : 0.38);
+    if (e.colorDark) e.colorDark = mixHex(e.colorDark, ch.monsterDark, 0.42);
+  }
+
+  function initChapterBoss(e) {
+    const ch = chapterOf((state && state.stage) || 1);
+    e.chapterBoss = true;
+    e.chapterId = ch.slot;
+    e.bossName = ch.bossName;
+    e.bossPhase = 1;
+    e.shield = 0;
+    e.shieldMax = 0;
+    e.shieldRegen = 0;
+    e.phaseSpeedMul = 1;
+    e.laneSwitch = false;
+    e.laneClock = 0;
+    e.laneFast = true;
+    e.enrageAura = 0;
+    e.selfSpeed = 1;
+    e.regenRate = 0;
+    e.regenUntil = 0;
+    e.frostAura = false;
+    e.color = ch.bossColor;
+    e.colorDark = ch.bossDark;
+    e.drawScale = 1.95;
+    e.visualTier = "boss";
+  }
+
+  function summonBossAdds(boss, adds) {
+    if (!adds || !pathLen) return;
+    for (const spec of adds) {
+      const n = spec.n || 1;
+      for (let i = 0; i < n; i++) {
+        const reward = Math.max(1, Math.round((boss.reward || 8) * 0.08));
+        const add = new Enemy(spec.kind, 1.05, 1, reward);
+        add.maxHp = Math.max(14, Math.round(boss.maxHp * (spec.hpFrac || 0.08)));
+        add.hp = add.maxHp;
+        add.chapterAdd = true;
+        const spd = spec.kind === "tank" ? 0.7 : spec.kind === "flyer" ? 1.35 : 1.15;
+        add.baseSpeed = BASE_SPEED * spd * cellSize;
+        add.progress = Math.max(0, boss.progress - cellSize * (0.45 + i * 0.38));
+        const p = posOnPath(Math.min(add.progress, Math.max(0.01, pathLen - 0.01)));
+        add.x = p.x;
+        add.y = p.y;
+        add.angle = p.angle;
+        state.enemies.push(add);
+      }
+    }
+  }
+
+  function enterBossPhase(e, ph, now) {
+    e.bossPhase = ph.phase;
+    if (ph.id === "shield") {
+      e.shieldMax = Math.max(1, Math.round(e.maxHp * (ph.shieldFrac || 0.25)));
+      e.shield = e.shieldMax;
+      e.shieldRegen = ph.shieldRegen || 0;
+    } else if (ph.id === "laneswitch") {
+      e.laneSwitch = true;
+      e.laneClock = 0;
+      e.laneFast = true;
+      e.phaseSpeedMul = 1.75;
+    } else if (ph.id === "enrage") {
+      e.enrageAura = ph.aura || 1.2;
+      e.selfSpeed = ph.self || 1.15;
+      e.phaseSpeedMul = e.selfSpeed;
+    } else if (ph.id === "regen") {
+      e.regenRate = ph.regen || 0.02;
+      e.regenUntil = now + (ph.dur || 5);
+      if (ph.adds) summonBossAdds(e, ph.adds);
+    } else if (ph.id === "frostpulse") {
+      e.frostAura = true;
+      if (ph.adds) summonBossAdds(e, ph.adds);
+    } else if (ph.id === "summon") {
+      if (ph.adds) summonBossAdds(e, ph.adds);
+    }
+    toast(`${e.bossName} · ${ph.toast}`, 1800);
+    sfx("wave");
+  }
+
+  function tickChapterBoss(e, dt, now) {
+    if (!e || !e.chapterBoss || e.dead || e.escaped) return;
+    const ch = CHAPTERS[((e.chapterId || 1) - 1) % CHAPTERS.length];
+    const ratio = e.maxHp > 0 ? e.hp / e.maxHp : 1;
+    for (const ph of ch.phases) {
+      if ((e.bossPhase || 1) >= ph.phase) continue;
+      if (ratio <= ph.at) enterBossPhase(e, ph, now);
+    }
+    if (e.laneSwitch) {
+      e.laneClock = (e.laneClock || 0) + dt;
+      if (e.laneClock >= 3.2) {
+        e.laneClock = 0;
+        e.laneFast = !e.laneFast;
+        e.phaseSpeedMul = e.laneFast ? 1.75 : 0.48;
+      }
+    }
+    if (e.shieldRegen && e.shield > 0 && e.shieldMax > 0) {
+      e.shield = Math.min(e.shieldMax, e.shield + e.maxHp * e.shieldRegen * dt);
+    }
+    if (e.regenRate && now < (e.regenUntil || 0) && e.hp > 0 && e.hp < e.maxHp) {
+      e.hp = Math.min(e.maxHp, e.hp + e.maxHp * e.regenRate * dt);
+    }
+  }
+
+  function enrageMulAt(x, y, self) {
+    let mul = 1;
+    for (const b of state.enemies) {
+      if (!b.enrageAura || b.dead || b.escaped || b === self) continue;
+      if (dist(b.x, b.y, x, y) <= cellSize * 2.45) mul = Math.max(mul, b.enrageAura);
+    }
+    return mul;
+  }
+
+  function towerFrostMul(t) {
+    for (const e of state.enemies) {
+      if (!e.frostAura || e.dead || e.escaped) continue;
+      if (dist(t.x, t.y, e.x, e.y) <= cellSize * 2.6) return 0.75;
+    }
+    return 1;
+  }
+
   class Projectile {
     constructor(tower, target, now) {
       this.x = tower.x;
@@ -1133,6 +1564,9 @@
       this.ignoreShieldArrow = !!tower.ignoreShieldArrow;
       this.burnGround = !!tower.burnGround;
       this.freezeChance = tower.freezeChance || 0;
+      this.tankBonus = tower.tankBonus || 0;
+      this.iceBurst = !!tower.iceBurst;
+      this.evo = tower.evo || null;
       this.speed = cellSize * (this.style === "cannon" ? 6 : this.style === "arrow" && tower.branch === "snipe" ? 14 : 10);
       this.alive = true;
       this.born = now;
@@ -1140,6 +1574,10 @@
       this.vx = Math.cos(ang) * this.speed;
       this.vy = Math.sin(ang) * this.speed;
       this.color =
+        tower.evo === "frostarrow" ? "#b3e5fc" :
+        tower.evo === "skybow" ? "#dce775" :
+        tower.evo === "perma" ? "#e1f5fe" :
+        tower.evo === "siege" ? "#ff8a50" :
         this.style === "frost" ? "#81d4fa" :
         this.style === "cannon" ? "#ffab91" : "#c8e6c9";
     }
@@ -1175,6 +1613,7 @@
           speedMul: group.speedMul,
           hpMul: group.hpMul,
           reward: group.reward,
+          chapterBoss: !!group.chapterBoss,
         });
       }
     }
@@ -1199,8 +1638,12 @@
     btnNextWave.disabled = true;
     btnNextWave.textContent = `第 ${n} 波进行中…`;
     const hasBoss = state.spawnQueue.some((q) => q.kind === "boss");
+    const chapterFinal = state.spawnQueue.some((q) => q.chapterBoss);
     let label = `第 ${n} 波来袭！`;
-    if (n === WAVES_PER_LEVEL) {
+    if (chapterFinal) {
+      const ch = chapterOf(state.stage || 1);
+      label = `⚠ 章节首领 · ${ch.bossName} · ${ch.displayName}`;
+    } else if (n === WAVES_PER_LEVEL) {
       label = state.level >= TOTAL_LEVELS
         ? `⚠ 终局 Boss · 第 ${state.level} 关终章！`
         : `⚠ 本关终波 Boss · 第 ${n} 波！`;
@@ -1338,6 +1781,7 @@
     endStats.innerHTML = `
       <li>难度 <span>${diffDef().name}</span></li>
       <li>关卡 <span>${state.level}/${TOTAL_LEVELS}</span></li>
+      <li>章节 <span>${chapterOf(state.stage).displayName}</span></li>
       <li>地图阶 <span>${state.stage}</span></li>
       <li>击杀 <span>${state.kills}</span></li>
       <li>剩余金币 <span>${state.gold}</span></li>
@@ -1414,9 +1858,11 @@
     renderSkillButtons();
     updateBuildButtons();
     updateHUD();
-    persistSave({ lastDiff: diffKey, lastMap: state.mapIndex, lastLevel: level });
+    state.tintChapter = tintUnlocked(menuTint) ? menuTint : 0;
+    persistSave({ lastDiff: diffKey, lastMap: state.mapIndex, lastLevel: level, lastTint: state.tintChapter });
     const sn = skills.map((id) => SKILL_DEFS[id].short).join("·");
-    toast(`第 ${level} 关 · ${diffDef().name} · ${(SCENE_SKINS[state.mapIndex] || SCENE_SKINS[0]).name} · ${sn}`, 2200);
+    const chRun = chapterOf(state.stage);
+    toast(`第 ${chRun.stage} 章 ${chRun.displayName} · ${diffDef().name} · ${sn}`, 2200);
   }
 
   function showStartMenu() {
@@ -1491,6 +1937,7 @@
 
   let menuDiff = "patrol";
   let menuMap = 0;
+  let menuTint = 0;
 
   function refreshStartMenu() {
     const save = loadSave();
@@ -1520,11 +1967,33 @@
     }
     const lv = Number(startLevelInput && startLevelInput.value) || 1;
     const st = mapStage(lv);
+    const ch = chapterOf(st);
+    if (!tintUnlocked(menuTint)) menuTint = 0;
+    state.tintChapter = menuTint;
+    state.stage = st;
+    if (startChapterEl) {
+      const tintNote = menuTint && menuTint !== ch.slot ? ` · 妆点 ${CHAPTERS[menuTint - 1].short}` : "";
+      startChapterEl.textContent = `第 ${st} 章 · ${ch.displayName}${tintNote}`;
+      startChapterEl.style.color = ch.accentHex;
+    }
     if (startStageHint) {
       const d = DIFFICULTIES[menuDiff];
       const skin = SCENE_SKINS[menuMap] || SCENE_SKINS[0];
+      const bossNote = (lv % 30 === 0) ? ` · 终波首领 ${ch.bossName}` : "";
       startStageHint.textContent =
-        `地图阶 ${st}（路径难度）· ${skin.name} · 生命 ${d.lives} · 开局金 ${START_GOLD_BASE + d.goldBonus} · 怪血×${d.hp}`;
+        `${skin.name}饰物 · 生命 ${d.lives} · 开局金 ${START_GOLD_BASE + d.goldBonus} · 怪血×${d.hp}${bossNote}`;
+    }
+    if (startTintBtns) {
+      startTintBtns.querySelectorAll("[data-tint]").forEach((btn) => {
+        const n = Number(btn.dataset.tint) | 0;
+        const locked = n > 0 && !tintUnlocked(n);
+        btn.classList.toggle("active", n === menuTint);
+        btn.classList.toggle("locked", locked);
+        btn.disabled = locked;
+        if (n > 0) {
+          btn.title = locked ? `通关第 ${n - 1} 章后解锁` : `${CHAPTERS[n - 1].name}妆点`;
+        }
+      });
     }
   }
 
@@ -1535,14 +2004,25 @@
     elWave.textContent = `${state.wave}/${WAVES_PER_LEVEL}`;
     if (elLevel) elLevel.textContent = `${state.level}/${TOTAL_LEVELS}`;
     if (elDiff) elDiff.textContent = diffDef().name;
+    const chNow = chapterOf(state.stage || 1);
+    if (elChapter) {
+      const tint = state.tintChapter && state.tintChapter !== chNow.slot
+        ? `·${CHAPTERS[state.tintChapter - 1].short}`
+        : "";
+      elChapter.textContent = chNow.displayName + tint;
+      elChapter.style.color = chNow.accentHex;
+    }
+    if (document.body.dataset.chapter !== String(chNow.slot)) {
+      document.body.dataset.chapter = String(chNow.slot);
+    }
     let status = "准备就绪";
     if (state.paused) status = "已暂停";
     else if (state.phase === "menu") status = "选关中";
-    else if (state.phase === "countdown") status = `休息 ${state.countdown.toFixed(1)}s`;
-    else if (state.phase === "spawning" || state.phase === "fighting") status = `阶${state.stage} · 战斗`;
+    else if (state.phase === "countdown") status = `${chNow.short} · 休息 ${state.countdown.toFixed(1)}s`;
+    else if (state.phase === "spawning" || state.phase === "fighting") status = `${chNow.short} · 战斗`;
     else if (state.phase === "won") status = "通关";
     else if (state.phase === "lost") status = "失败";
-    else if (state.phase === "idle") status = "点击下方开始";
+    else if (state.phase === "idle") status = chNow.short;
     elStatus.textContent = status;
     updateBuildButtons();
     if (state.selected) refreshSelectPanel();
@@ -1588,6 +2068,7 @@
 
   function mergeBlockReason(src, dst) {
     if (!src || !dst || src === dst) return "无效目标";
+    if (src.evo || dst.evo) return "进化塔不能合成";
     if (src.type !== dst.type) return "需同种塔";
     if ((src.star || 1) !== (dst.star || 1)) return "需同星级";
     if (dst.star >= 3) return "已满 3 星";
@@ -1595,6 +2076,24 @@
       return `双方需 Lv≥${MERGE_MIN_LEVEL}`;
     }
     return "";
+  }
+
+  function applyEvolution(target, src, recipe) {
+    const invested = target.invested + src.invested;
+    state.towers = state.towers.filter((t) => t !== src);
+    if (state.selected === src) deselect();
+    target.invested = invested;
+    target.evo = recipe.id;
+    target.mergePips = 0;
+    target.refresh();
+    const wasKnown = recipeKnown(recipe.id);
+    discoverEvo(recipe.id);
+    spawnParticle(target.x, target.y, "#80d8ff", 16);
+    spawnParticle(target.x, target.y, "#ffd54f", 12);
+    sfx("upgrade");
+    selectTower(target);
+    toast(`进化：${recipe.name}${wasKnown ? "" : " · 已记入图鉴"}`, 2200);
+    updateHUD();
   }
 
   function canMergeCandidate(anchor, t) {
@@ -2021,7 +2520,7 @@
       const raw = localStorage.getItem(RUN_SNAPSHOT_KEY);
       if (!raw) return false;
       const data = JSON.parse(raw);
-      return !!(data && data.v === 18 && data.state && Array.isArray(data.state.activeSkills));
+      return !!(data && (data.v === 18 || data.v === 20) && data.state && Array.isArray(data.state.activeSkills));
     } catch (_) { return false; }
   }
 
@@ -2036,6 +2535,14 @@
       blinkTimer: e.blinkTimer || 0, visualTier: e.visualTier,
       drawScale: e.drawScale, yLift: e.yLift,
       spawnFlashUntil: e.spawnFlashUntil || 0,
+      chapterBoss: !!e.chapterBoss, chapterId: e.chapterId || 0,
+      bossName: e.bossName || "", bossPhase: e.bossPhase || 1,
+      shield: e.shield || 0, shieldMax: e.shieldMax || 0,
+      shieldRegen: e.shieldRegen || 0, phaseSpeedMul: e.phaseSpeedMul || 1,
+      laneSwitch: !!e.laneSwitch, laneClock: e.laneClock || 0, laneFast: e.laneFast !== false,
+      enrageAura: e.enrageAura || 0, selfSpeed: e.selfSpeed || 1,
+      regenRate: e.regenRate || 0, regenUntil: e.regenUntil || 0,
+      frostAura: !!e.frostAura, color: e.color, colorDark: e.colorDark,
     };
   }
 
@@ -2061,6 +2568,28 @@
     e.drawScale = data.drawScale || e.drawScale;
     e.yLift = data.yLift != null ? data.yLift : e.yLift;
     e.spawnFlashUntil = data.spawnFlashUntil || 0;
+    if (data.chapterBoss) {
+      e.chapterBoss = true;
+      e.chapterId = data.chapterId || chapterOf(state.stage || 1).slot;
+      e.bossName = data.bossName || chapterOf(state.stage || 1).bossName;
+      e.bossPhase = data.bossPhase || 1;
+      e.shield = data.shield || 0;
+      e.shieldMax = data.shieldMax || 0;
+      e.shieldRegen = data.shieldRegen || 0;
+      e.phaseSpeedMul = data.phaseSpeedMul || 1;
+      e.laneSwitch = !!data.laneSwitch;
+      e.laneClock = data.laneClock || 0;
+      e.laneFast = data.laneFast !== false;
+      e.enrageAura = data.enrageAura || 0;
+      e.selfSpeed = data.selfSpeed || 1;
+      e.regenRate = data.regenRate || 0;
+      e.regenUntil = data.regenUntil || 0;
+      e.frostAura = !!data.frostAura;
+      if (data.color) e.color = data.color;
+      if (data.colorDark) e.colorDark = data.colorDark;
+      e.visualTier = "boss";
+      e.drawScale = data.drawScale || 1.95;
+    }
     const p = posOnPath(Math.min(e.progress, Math.max(0, pathLen - 0.01)));
     e.x = p.x; e.y = p.y; e.angle = p.angle;
     return e;
@@ -2070,6 +2599,7 @@
     return {
       type: t.type, c: t.c, r: t.r, star: t.star, level: t.level,
       invested: t.invested, branch: t.branch, mergePips: t.mergePips || 0,
+      evo: t.evo || null,
     };
   }
 
@@ -2078,7 +2608,7 @@
     if (!["idle", "countdown", "spawning", "fighting"].includes(state.phase)) return;
     try {
       const snap = {
-        v: 18,
+        v: 20,
         gameNow,
         state: {
           difficulty: state.difficulty,
@@ -2101,6 +2631,7 @@
           timeSlowUntil: state.timeSlowUntil || 0,
           goldTideUntil: state.goldTideUntil || 0,
           skillHintShown: !!state.skillHintShown,
+          tintChapter: state.tintChapter || 0,
           _nextWave: state._nextWave || 0,
           spawnTimer: state.spawnTimer,
           spawnQueue: (state.spawnQueue || []).map((q) => Object.assign({}, q)),
@@ -2123,7 +2654,7 @@
     try {
       data = JSON.parse(localStorage.getItem(RUN_SNAPSHOT_KEY) || "null");
     } catch (_) { return false; }
-    if (!data || data.v !== 18 || !data.state) return false;
+    if (!data || (data.v !== 18 && data.v !== 20) || !data.state) return false;
     const s = data.state;
     clearLevelBoard();
     setupLevel(s.level, s.difficulty, { mapIndex: s.mapIndex });
@@ -2155,12 +2686,14 @@
       timeSlowUntil: s.timeSlowUntil || 0,
       goldTideUntil: s.goldTideUntil || 0,
       pendingStart: null,
+      tintChapter: s.tintChapter || 0,
       _nextWave: s._nextWave || 0,
     });
     state.spawnQueue = (s.spawnQueue || []).map((q) => Object.assign({}, q));
     state.towers = (s.towers || []).map((td) => {
       const t = new Tower(td.type, td.c, td.r, {
         star: td.star, level: td.level, invested: td.invested, branch: td.branch,
+        evo: td.evo || null,
       });
       t.mergePips = td.mergePips || 0;
       return t;
@@ -2226,7 +2759,11 @@
       t.burnGround ? "落火" : "",
       t.freezeChance ? `冰封 ${Math.round(t.freezeChance * 100)}%` : "",
       t.shatterBonus ? "碎冰光环" : "",
+      t.evoName ? "已进化" : "",
+      t.tankBonus ? `对坦克 ×${t.tankBonus}` : "",
+      t.iceBurst ? "击杀冰爆" : "",
     ].filter(Boolean).join(" · ");
+    const evoHints = evoHintsFor(t);
     selStats.innerHTML =
       `伤害 ${t.damage} · 射速 ${t.rate.toFixed(2)}/s<br>` +
       `射程 ${t.range.toFixed(1)} 格` +
@@ -2234,6 +2771,7 @@
       slowTxt +
       multiTxt +
       (flagTxt ? `<br>${flagTxt}` : "") +
+      (evoHints.length ? `<br>${evoHints.join("<br>")}` : "") +
       `<br>投入 ${t.invested} · 卖出 ${t.sellValue()}`;
 
     if (t.level >= 3) {
@@ -2248,8 +2786,10 @@
     btnSell.textContent = `卖掉 +${t.sellValue()}`;
     if (btnMerge) {
       btnMerge.classList.remove("active");
-      btnMerge.disabled = t.star >= 3;
-      btnMerge.textContent = t.star >= 3 ? "已满星" : `拖拽合成 ${(t.mergePips||0)+1}/3（Lv≥${MERGE_MIN_LEVEL}）`;
+      btnMerge.disabled = t.star >= 3 || !!t.evo;
+      btnMerge.textContent = t.evo
+        ? "已进化"
+        : (t.star >= 3 ? "拖材料进化" : `拖拽合成 ${(t.mergePips||0)+1}/3（Lv≥${MERGE_MIN_LEVEL}）`);
     }
   }
 
@@ -2363,7 +2903,7 @@
       if (!d.moved && dist(x, y, d.sx, d.sy) > cellSize * 0.35) {
         d.moved = true;
         if (state.selected) deselect();
-        toast("拖到同种同星且 Lv≥" + MERGE_MIN_LEVEL + " 的塔上合成", 1400);
+        toast("拖到同星塔合成，或把材料拖到 3★ 目标上进化", 1500);
       }
     }
   }
@@ -2388,13 +2928,23 @@
       toast("已放回原位");
       return;
     }
-    const why = mergeBlockReason(d.tower, target);
-    if (why) {
-      toast(why, 1600);
-      sfx("click");
-      return;
-    }
     try {
+      const recipe = matchRecipe(target, d.tower);
+      if (recipe) {
+        applyEvolution(target, d.tower, recipe);
+        return;
+      }
+      if (matchRecipe(d.tower, target)) {
+        toast("把材料塔拖到 3★ 目标上，而不是反过来", 1800);
+        sfx("click");
+        return;
+      }
+      const why = evolveMissReason(d.tower, target) || mergeBlockReason(d.tower, target);
+      if (why) {
+        toast(why, 1700);
+        sfx("click");
+        return;
+      }
       feedMerge(target, d.tower);
     } catch (err) {
       console.error("[路卫] merge error", err);
@@ -2537,6 +3087,58 @@
   if (startLevelInput) {
     startLevelInput.addEventListener("input", () => refreshStartMenu());
   }
+  if (startTintBtns) {
+    startTintBtns.addEventListener("click", (ev) => {
+      const btn = ev.target.closest("[data-tint]");
+      if (!btn) return;
+      sfx("click");
+      const n = Number(btn.dataset.tint) | 0;
+      if (n > 0 && !tintUnlocked(n)) {
+        toast(`通关第 ${n - 1} 章后解锁「${CHAPTERS[n - 1].short}」妆点`, 1800);
+        return;
+      }
+      menuTint = n;
+      refreshStartMenu();
+    });
+  }
+
+  function renderCodex() {
+    if (!codexList) return;
+    const globalOpen = recipesUnlockedGlobal();
+    codexList.innerHTML = "";
+    Object.values(EVO_DEFS).forEach((def) => {
+      const known = recipeKnown(def.id);
+      const row = document.createElement("div");
+      row.className = "codex-row" + (known ? "" : " locked");
+      const badge = known ? (globalOpen ? "已解锁" : "已发现") : "未解锁";
+      row.innerHTML =
+        `<div class="codex-name">${def.name} <span class="codex-badge">${badge}</span></div>` +
+        `<div class="codex-hint">${def.hint}</div>` +
+        `<div class="codex-blurb">${def.blurb}</div>` +
+        (known ? "" : `<div class="codex-lock">通关第 1 章后记入图鉴，或在本局拖对材料发现</div>`);
+      codexList.appendChild(row);
+    });
+  }
+
+  function openCodex() {
+    renderCodex();
+    if (codexOverlay) codexOverlay.classList.remove("hidden");
+  }
+  function closeCodex() {
+    if (codexOverlay) codexOverlay.classList.add("hidden");
+  }
+  if (btnCodex) {
+    btnCodex.addEventListener("click", () => {
+      sfx("click");
+      openCodex();
+    });
+  }
+  if (btnCodexClose) {
+    btnCodexClose.addEventListener("click", () => {
+      sfx("click");
+      closeCodex();
+    });
+  }
   if (btnStartGame) {
     btnStartGame.addEventListener("click", () => {
       sfx("click");
@@ -2621,14 +3223,41 @@
     }
   }
 
+  function iceBurstAt(x, y, damage, now) {
+    const radius = cellSize * 0.9;
+    for (const e of state.enemies) {
+      if (e.dead || e.escaped) continue;
+      if (dist(x, y, e.x, e.y) <= radius + e.radius * cellSize) {
+        damageEnemy(e, damage, now, "frost", true, { ignoreShieldArrow: false });
+        e.applySlow(0.35, 0.7, now);
+      }
+    }
+    state.explosions.push({
+      x, y, r: 4, maxR: radius, life: 0.28, maxLife: 0.28, shards: 7, tint: "#b3e5fc",
+    });
+    spawnParticle(x, y, "#e1f5fe", 8);
+  }
+
   function damageEnemy(e, amount, now, style, isSplash, opts = {}) {
     if (e.dead) return;
     let raw = amount;
+    if (opts.tankBonus && e.kind === "tank") raw *= opts.tankBonus;
     if (hasShatterAura() && now < e.slowUntil && e.slowMul < 1) {
       raw *= 1.25;
     }
-    const dmg = e.mitigate(raw, style, !!isSplash, !!opts.ignoreShieldArrow);
-    e.hp -= dmg;
+    let dmg = e.mitigate(raw, style, !!isSplash, !!opts.ignoreShieldArrow);
+    if (e.shield > 0) {
+      const absorbed = Math.min(e.shield, dmg);
+      e.shield -= absorbed;
+      dmg -= absorbed;
+      if (e.shield <= 0) {
+        e.shield = 0;
+        e.shieldRegen = 0;
+        spawnParticle(e.x, e.y, "#fff8e1", 8);
+        toast("护盾破碎", 1200);
+      }
+    }
+    if (dmg > 0) e.hp -= dmg;
     e.hitFlash = now + 0.1;
     if (e.hp <= 0) {
       e.dead = true;
@@ -2643,6 +3272,9 @@
       if (e.splitOnDeath || e.kind === "splitter") {
         spawnSplitlings(e);
       }
+      if (opts.iceBurst) {
+        iceBurstAt(e.x, e.y, Math.max(4, (opts.iceBurstDamage || amount) * 0.45), now);
+      }
     } else {
       sfx("hit");
     }
@@ -2651,7 +3283,12 @@
   function hitProjectile(p, now) {
     p.alive = false;
     const target = p.target;
-    const opts = { ignoreShieldArrow: !!p.ignoreShieldArrow };
+    const opts = {
+      ignoreShieldArrow: !!p.ignoreShieldArrow,
+      tankBonus: p.tankBonus || 0,
+      iceBurst: !!p.iceBurst,
+      iceBurstDamage: p.damage,
+    };
     if (p.splash > 0) {
       sfx("boom");
       for (const e of state.enemies) {
@@ -2716,7 +3353,8 @@
             state.waveWallStart = performance.now();
           }
           const neo = new Enemy(spec.kind, spec.speedMul, spec.hpMul, spec.reward);
-          if (neo.kind === "boss") neo.spawnFlashUntil = gameNow + 0.3;
+          if (spec.chapterBoss) initChapterBoss(neo);
+          if (neo.kind === "boss") neo.spawnFlashUntil = gameNow + 0.45;
           state.enemies.push(neo);
           // 终局重叠出场：Boss 后极短间隔
           if (state.wave === WAVES_PER_LEVEL) {
@@ -2745,8 +3383,13 @@
     state.allies = state.allies.filter((a) => a.hp > 0 && now < a.until);
 
     for (const e of state.enemies) {
+      if (!e.dead && !e.escaped) tickChapterBoss(e, dt, now);
+    }
+
+    for (const e of state.enemies) {
       if (e.dead || e.escaped) continue;
       let spd = e.speed(now);
+      spd *= enrageMulAt(e.x, e.y, e);
       if (now < (state.timeSlowUntil || 0)) {
         spd *= (e.kind === "boss" ? 0.65 : 0.4);
       }
@@ -2836,7 +3479,8 @@
           for (const target of targets) {
             state.projectiles.push(new Projectile(t, target, now));
           }
-          t.cooldown = 1 / t.rate;
+          const frostMul = towerFrostMul(t);
+          t.cooldown = 1 / Math.max(0.05, t.rate * frostMul);
           t.muzzleFlash = 0.08;
           sfxShot(t.projectile);
         }
@@ -2971,6 +3615,10 @@
     if (document.body.dataset.decor !== skin.decor) {
       document.body.dataset.decor = skin.decor;
     }
+    const chapSlot = String(skin.chapterSlot || 1);
+    if (document.body.dataset.chapter !== chapSlot) {
+      document.body.dataset.chapter = chapSlot;
+    }
 
     const entry = pathPoints[0];
     const exit = pathPoints[pathPoints.length - 1];
@@ -3072,16 +3720,19 @@
       const d = state.drag, src = d.tower;
       for (const t of state.towers) {
         if (t === src) continue;
-        const ok = !mergeBlockReason(src, t);
-        if (!ok && t.type !== src.type) continue;
+        const evoOk = !!matchRecipe(t, src);
+        const ok = evoOk || !mergeBlockReason(src, t);
+        if (!ok && t.type !== src.type && !evoOk) continue;
+        if (!ok && !evoOk && t.type !== src.type) continue;
         ctx.save();
-        ctx.strokeStyle = ok ? "#69f0ae" : "#ff5252";
+        ctx.strokeStyle = evoOk ? "#ffd54f" : (ok ? "#69f0ae" : "#ff5252");
         ctx.lineWidth = 3; ctx.shadowColor = ctx.strokeStyle; ctx.shadowBlur = 10;
         ctx.strokeRect(t.x - cellSize * 0.46, t.y - cellSize * 0.46, cellSize * 0.92, cellSize * 0.92);
         ctx.restore();
       }
       const hov = towerAt(Math.floor(d.x / cellSize), Math.floor(d.y / cellSize));
-      const valid = hov && hov !== src && !mergeBlockReason(src, hov);
+      const evoHere = hov && matchRecipe(hov, src);
+      const valid = !!(evoHere || (hov && hov !== src && !mergeBlockReason(src, hov)));
       ctx.save();
       ctx.globalAlpha = 0.35; ctx.strokeStyle = "#fff"; ctx.setLineDash([4, 4]);
       ctx.strokeRect(src.x - cellSize * 0.45, src.y - cellSize * 0.45, cellSize * 0.9, cellSize * 0.9);
@@ -3089,7 +3740,7 @@
       const ghost = Object.assign(Object.create(Object.getPrototypeOf(src)), src, { x: d.x, y: d.y - cellSize * 0.3 });
       drawTower(ghost, cellSize, 0.75);
       ctx.beginPath(); ctx.arc(d.x, d.y - cellSize * 0.3, cellSize * 0.5, 0, Math.PI * 2);
-      ctx.strokeStyle = valid ? "#69f0ae" : (hov && hov !== src ? "#ff5252" : "rgba(255,255,255,0.6)");
+      ctx.strokeStyle = evoHere ? "#ffd54f" : (valid ? "#69f0ae" : (hov && hov !== src ? "#ff5252" : "rgba(255,255,255,0.6)"));
       ctx.lineWidth = 2.5; ctx.stroke();
     }
 
@@ -3168,16 +3819,29 @@
     ctx.fillStyle = vig;
     ctx.fillRect(0, 0, w, h);
 
-    ctx.fillStyle = skin.accent;
-    ctx.font = `600 ${Math.max(11, cellSize * 0.3)}px ${getComputedStyle(document.body).fontFamily}`;
     ctx.textAlign = "center";
-    ctx.fillText(`路卫 · ${skin.name}`, w / 2, cellSize * 0.4);
+    ctx.textBaseline = "middle";
+    const plate = skin.chapterName || skin.name;
+    ctx.font = `700 ${Math.max(12, cellSize * 0.34)}px ${getComputedStyle(document.body).fontFamily}`;
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "rgba(0,0,0,0.55)";
+    ctx.strokeText(plate, w / 2, cellSize * 0.38);
+    ctx.fillStyle = skin.accentHex || skin.accent;
+    ctx.fillText(plate, w / 2, cellSize * 0.38);
+    if (skin.tintName) {
+      ctx.font = `600 ${Math.max(9, cellSize * 0.22)}px ${getComputedStyle(document.body).fontFamily}`;
+      ctx.strokeText(`妆·${skin.tintName}`, w / 2, cellSize * 0.72);
+      ctx.fillStyle = "rgba(255,255,255,0.8)";
+      ctx.fillText(`妆·${skin.tintName}`, w / 2, cellSize * 0.72);
+    }
   }
 
 
   function drawSceneWash(skin, w, h) {
+    const decor = atmosphereDecor(skin);
     const tops = {
       brick: "rgba(64,44,20,0.07)",
+      dust: "rgba(120,90,40,0.16)",
       fog: "rgba(48,42,78,0.24)",
       snow: "rgba(176,206,240,0.16)",
       lava: "rgba(96,28,0,0.16)",
@@ -3185,39 +3849,41 @@
     };
     const bots = {
       brick: "rgba(0,0,0,0.1)",
+      dust: "rgba(40,24,8,0.16)",
       fog: "rgba(4,6,14,0.2)",
       snow: "rgba(6,14,26,0.16)",
       lava: "rgba(36,6,0,0.22)",
       toxic: "rgba(2,14,6,0.2)",
     };
     const g = ctx.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0, tops[skin.decor] || "rgba(0,0,0,0)");
+    g.addColorStop(0, tops[decor] || "rgba(0,0,0,0)");
     g.addColorStop(0.55, "rgba(0,0,0,0)");
-    g.addColorStop(1, bots[skin.decor] || "rgba(0,0,0,0.08)");
+    g.addColorStop(1, bots[decor] || "rgba(0,0,0,0.08)");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
-    if (skin.decor === "fog" || skin.decor === "snow" || skin.decor === "brick") {
+    if (decor === "fog" || decor === "snow" || decor === "brick" || decor === "dust") {
       const mx = w * 0.82;
       const my = h * 0.055;
       const mr = Math.max(7, Math.min(w, h) * 0.034);
       ctx.beginPath();
       ctx.arc(mx, my, mr, 0, Math.PI * 2);
-      ctx.fillStyle = skin.decor === "brick" ? "rgba(255,226,180,0.38)" : "rgba(230,238,255,0.55)";
+      ctx.fillStyle = (decor === "brick" || decor === "dust") ? "rgba(255,226,180,0.38)" : "rgba(230,238,255,0.55)";
       ctx.fill();
     }
   }
 
   function drawSceneMotes(skin, w, h, now) {
-    const n = skin.decor === "fog" ? 12 : 22;
+    const decor = atmosphereDecor(skin);
+    const n = decor === "fog" ? 12 : 22;
     for (let i = 0; i < n; i++) {
       const seed = i * 97.13;
-      if (skin.decor === "snow") {
+      if (decor === "snow") {
         const x = ((seed * 13 + Math.sin(now * 0.6 + i) * 14 + now * (16 + (i % 5) * 5)) % (w + 24)) - 12;
         const y = ((seed * 7 + now * (26 + (i % 6) * 8)) % (h + 24)) - 12;
         ctx.globalAlpha = 0.4 + (i % 4) * 0.1;
         ctx.fillStyle = "rgba(255,255,255,0.9)";
         ctx.fillRect(x, y, i % 3 === 0 ? 2.1 : 1.4, i % 3 === 0 ? 2.1 : 1.4);
-      } else if (skin.decor === "lava") {
+      } else if (decor === "lava") {
         const x = ((seed * 19) % (w + 16)) - 8 + Math.sin(now * 1.3 + i) * 8;
         const y = h - ((seed + now * (20 + (i % 5) * 12)) % (h + 36));
         ctx.globalAlpha = 0.35 + Math.abs(Math.sin(now * 6 + i)) * 0.5;
@@ -3225,7 +3891,7 @@
         ctx.beginPath();
         ctx.arc(x, y, i % 5 === 0 ? 2 : 1.25, 0, Math.PI * 2);
         ctx.fill();
-      } else if (skin.decor === "fog") {
+      } else if (decor === "fog") {
         const x = ((seed * 11 + now * (7 + (i % 3) * 3)) % (w + 70)) - 30;
         const y = ((seed * 5) % h) + Math.sin(now * 0.35 + i) * 6;
         ctx.globalAlpha = 0.05 + (i % 3) * 0.02;
@@ -3233,13 +3899,21 @@
         ctx.beginPath();
         ctx.ellipse(x, y, 26 + (i % 4) * 8, 9, 0, 0, Math.PI * 2);
         ctx.fill();
-      } else if (skin.decor === "toxic") {
+      } else if (decor === "toxic") {
         const x = ((seed * 17 + now * (9 + (i % 4) * 3)) % (w + 16)) - 8;
         const y = ((seed * 9 + Math.sin(now * 0.7 + i) * 18) % (h + 16)) - 8;
         ctx.globalAlpha = 0.22 + (i % 3) * 0.1;
         ctx.fillStyle = "rgba(186,220,110,0.7)";
         ctx.beginPath();
         ctx.arc(x, y, 1.35, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (decor === "dust") {
+        const x = ((seed * 13 + now * (12 + (i % 4) * 4)) % (w + 20)) - 10;
+        const y = ((seed * 19 + now * (8 + (i % 3) * 2)) % (h + 16)) - 8;
+        ctx.globalAlpha = 0.2 + (i % 4) * 0.08;
+        ctx.fillStyle = i % 2 ? "rgba(196,164,96,0.8)" : "rgba(120,100,60,0.7)";
+        ctx.beginPath();
+        ctx.arc(x, y, 1.3, 0, Math.PI * 2);
         ctx.fill();
       } else {
         const x = ((seed * 13 + now * (10 + (i % 4) * 3)) % (w + 20)) - 10;
@@ -3422,6 +4096,7 @@
 
   /** 入口：僵尸裂隙 */
   function portalColors(decor) {
+    if (decor === "dust") return { ring: "rgba(196,164,90,0.85)", fill: "#24180e", stroke: "#e6c878", core: "rgba(160,120,50,0.7)", glyph: "#fff3d0" };
     if (decor === "fog") return { ring: "rgba(176,186,214,0.8)", fill: "#12141c", stroke: "#c5cbe0", core: "rgba(150,160,190,0.6)", glyph: "#f0eef8" };
     if (decor === "snow") return { ring: "rgba(186,220,255,0.85)", fill: "#15202c", stroke: "#d7ecff", core: "rgba(170,215,255,0.62)", glyph: "#f4fbff" };
     if (decor === "lava") return { ring: "rgba(255,120,40,0.88)", fill: "#1a0a06", stroke: "#ffab70", core: "rgba(255,90,20,0.72)", glyph: "#ffe0b2" };
@@ -3439,7 +4114,7 @@
 
   function drawZombieSpawn(x, y, now) {
     const skin = sceneSkinFor(state.stage || 1);
-    const pal = portalColors(skin.decor);
+    const pal = portalColors(atmosphereDecor(skin));
     const r = cellSize * 0.34;
     const pulse = 0.35 + Math.sin(now * 2.6) * 0.12;
     ctx.beginPath();
@@ -3614,7 +4289,8 @@
     frost: { main: "#29b6f6", light: "#e1f5fe", glow: "rgba(129,212,250," },
   };
   function towerScale(t) {
-    return 0.74 + 0.09 * (t.level - 1) + 0.05 * ((t.star || 1) - 1);
+    const evo = t.evo ? 0.12 : 0;
+    return 0.74 + 0.09 * (t.level - 1) + 0.05 * ((t.star || 1) - 1) + evo;
   }
   function polyPath(cx, cy, rad, n, rot) {
     ctx.beginPath();
@@ -3694,7 +4370,16 @@
         ctx.stroke();
       }
     }
-    if (t.branchName) {
+    if (t.evoName) {
+      ctx.font = `bold ${Math.max(10, s * 0.2)}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "rgba(0,0,0,0.8)";
+      ctx.strokeText(t.evoName, t.x, t.y - s * 0.5);
+      ctx.fillStyle = "#ffe082";
+      ctx.fillText(t.evoName, t.x, t.y - s * 0.5);
+    } else if (t.branchName) {
       ctx.font = `bold ${Math.max(9, s * 0.17)}px sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "bottom";
@@ -3716,16 +4401,206 @@
   function drawTower(t, s0, alpha) {
     const s = (s0 || cellSize) * towerScale(t);
     const mat = TOWER_MAT[Math.max(1, Math.min(3, t.level))];
-    const id = TOWER_ID[t.type];
+    const id = TOWER_ID[t.type] || TOWER_ID.arrow;
     ctx.save();
     if (alpha != null) ctx.globalAlpha = alpha;
-    drawGroundShadow(t.x, t.y, s * 0.34, s * 0.28);
-    drawStarAura(t, s, id);
-    if (t.type === "arrow") drawArrowTower(t, s, mat, id);
+    drawGroundShadow(t.x, t.y, s * 0.38, s * 0.3);
+    if (t.evo) drawEvoMark(t, s);
+    else drawStarAura(t, s, id);
+    if (t.evo === "frostarrow") drawEvoFrostArrow(t, s);
+    else if (t.evo === "siege") drawEvoSiege(t, s);
+    else if (t.evo === "perma") drawEvoPerma(t, s);
+    else if (t.evo === "skybow") drawEvoSkybow(t, s);
+    else if (t.type === "arrow") drawArrowTower(t, s, mat, id);
     else if (t.type === "cannon") drawCannonTower(t, s, mat, id);
     else drawFrostTower(t, s, mat, id);
     ctx.restore();
     if (alpha == null) drawTowerStars(t, s0 || cellSize);
+  }
+
+  function drawEvoMark(t, s) {
+    const now = performance.now() / 1000;
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,213,79,0.95)";
+    ctx.lineWidth = 2.4;
+    ctx.setLineDash([2, 5]);
+    ctx.lineDashOffset = -now * 22;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, s * 0.52, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  /** 霜矢哨：白蓝高塔 + 冰晶巨弓，和普通箭楼不是同一个轮廓 */
+  function drawEvoFrostArrow(t, s) {
+    const now = performance.now() / 1000;
+    ctx.fillStyle = "#102430";
+    roundRectPath(t.x - s * 0.16, t.y - s * 0.34, s * 0.32, s * 0.5, 3);
+    ctx.fill();
+    ctx.strokeStyle = "#b3e5fc";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = "#4fc3f7";
+    ctx.beginPath();
+    ctx.moveTo(t.x, t.y - s * 0.62);
+    ctx.lineTo(t.x + s * 0.16, t.y - s * 0.32);
+    ctx.lineTo(t.x - s * 0.16, t.y - s * 0.32);
+    ctx.closePath();
+    ctx.fill();
+    for (let i = 0; i < 3; i++) {
+      const a = now * 1.4 + i * 2.1;
+      const px = t.x + Math.cos(a) * s * 0.28;
+      const py = t.y - s * 0.08 + Math.sin(a) * s * 0.1;
+      ctx.fillStyle = "#e1f5fe";
+      ctx.beginPath();
+      ctx.moveTo(px, py - s * 0.08);
+      ctx.lineTo(px + s * 0.04, py);
+      ctx.lineTo(px, py + s * 0.05);
+      ctx.lineTo(px - s * 0.04, py);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.save();
+    ctx.translate(t.x, t.y - s * 0.05);
+    ctx.rotate(t.angle);
+    ctx.strokeStyle = "#e1f5fe";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(s * 0.02, 0, s * 0.22, -1.15, 1.15);
+    ctx.stroke();
+    ctx.strokeStyle = "#81d4fa";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(s * 0.46, 0);
+    ctx.stroke();
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.moveTo(s * 0.54, 0);
+    ctx.lineTo(s * 0.42, -s * 0.05);
+    ctx.lineTo(s * 0.42, s * 0.05);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /** 破城臼：超宽矮臼炮，黑色铁箍 + 橙裂，明显大于普通炮塔 */
+  function drawEvoSiege(t, s) {
+    ctx.fillStyle = "#1a100c";
+    ctx.beginPath();
+    ctx.ellipse(t.x, t.y + s * 0.08, s * 0.42, s * 0.22, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#ff8a50";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.strokeStyle = "#3e2723";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(t.x - s * 0.34, t.y + s * 0.08);
+    ctx.lineTo(t.x + s * 0.34, t.y + s * 0.08);
+    ctx.stroke();
+    ctx.fillStyle = "#4e342e";
+    ctx.beginPath();
+    ctx.arc(t.x, t.y - s * 0.02, s * 0.2, Math.PI, 0);
+    ctx.fill();
+    ctx.fillStyle = "#ff6e40";
+    ctx.beginPath();
+    ctx.arc(t.x, t.y - s * 0.02, s * 0.1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.save();
+    ctx.translate(t.x, t.y - s * 0.04);
+    ctx.rotate(t.angle);
+    roundRectPath(s * 0.02, -s * 0.1, s * 0.4, s * 0.2, 4);
+    ctx.fillStyle = "#263238";
+    ctx.fill();
+    ctx.strokeStyle = "#ffab40";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = "#ffd180";
+    ctx.fillRect(s * 0.34, -s * 0.05, s * 0.08, s * 0.1);
+    ctx.restore();
+    ctx.strokeStyle = "rgba(255,112,40,0.85)";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(t.x - s * 0.18, t.y + s * 0.16);
+    ctx.lineTo(t.x - s * 0.02, t.y + s * 0.02);
+    ctx.lineTo(t.x + s * 0.16, t.y + s * 0.18);
+    ctx.stroke();
+  }
+
+  /** 永冻塔：整格冰碑，不是六角小台 */
+  function drawEvoPerma(t, s) {
+    const now = performance.now() / 1000;
+    const pulse = 0.85 + Math.sin(now * 2.4) * 0.15;
+    ctx.fillStyle = "rgba(227,242,253,0.2)";
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, s * 0.4 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(t.x, t.y - s * 0.58);
+    ctx.lineTo(t.x + s * 0.28, t.y - s * 0.08);
+    ctx.lineTo(t.x + s * 0.16, t.y + s * 0.28);
+    ctx.lineTo(t.x - s * 0.16, t.y + s * 0.28);
+    ctx.lineTo(t.x - s * 0.28, t.y - s * 0.08);
+    ctx.closePath();
+    ctx.fillStyle = "#b3e5fc";
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.beginPath();
+    ctx.arc(t.x, t.y - s * 0.08, s * 0.08, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#0277bd";
+    ctx.lineWidth = 1.5;
+    for (let i = -1; i <= 1; i++) {
+      ctx.beginPath();
+      ctx.moveTo(t.x + i * s * 0.1, t.y + s * 0.22);
+      ctx.lineTo(t.x + i * s * 0.16, t.y + s * 0.42);
+      ctx.stroke();
+    }
+  }
+
+  /** 连天弩：高架多臂弩，四条弓臂扇开 */
+  function drawEvoSkybow(t, s) {
+    ctx.fillStyle = "#1b2420";
+    roundRectPath(t.x - s * 0.12, t.y - s * 0.2, s * 0.24, s * 0.46, 2);
+    ctx.fill();
+    ctx.strokeStyle = "#dce775";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = "#c0ca33";
+    ctx.beginPath();
+    ctx.moveTo(t.x - s * 0.22, t.y - s * 0.22);
+    ctx.lineTo(t.x, t.y - s * 0.48);
+    ctx.lineTo(t.x + s * 0.22, t.y - s * 0.22);
+    ctx.closePath();
+    ctx.fill();
+    ctx.save();
+    ctx.translate(t.x, t.y - s * 0.02);
+    ctx.rotate(t.angle);
+    const arms = [-0.16, -0.05, 0.05, 0.16];
+    arms.forEach((oy, i) => {
+      ctx.strokeStyle = i % 2 ? "#f0f4c3" : "#cddc39";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(s * 0.06, oy * s, s * 0.1, -1.2, 1.2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, oy * s);
+      ctx.lineTo(s * 0.42, oy * s);
+      ctx.stroke();
+      ctx.fillStyle = "#fffde7";
+      ctx.beginPath();
+      ctx.moveTo(s * 0.48, oy * s);
+      ctx.lineTo(s * 0.38, oy * s - s * 0.035);
+      ctx.lineTo(s * 0.38, oy * s + s * 0.035);
+      ctx.closePath();
+      ctx.fill();
+    });
+    ctx.restore();
   }
 
   /** 箭塔：方形高箭楼 + 绿色尖顶旗；连弩=三联弩臂，狙击=长弩+瞄镜 */
@@ -3975,7 +4850,7 @@
     if (tier === "elite" && !flash) {
       e.color = saturateHex(e.color, 1.25);
       e.colorDark = saturateHex(e.colorDark || e.color, 1.1);
-    } else if (tier === "boss" && !flash) {
+    } else if (tier === "boss" && !flash && !e.chapterBoss) {
       e.color = "#6b4a3a";
       e.colorDark = "#2a1018";
     } else if (tier === "normal" && !flash) {
@@ -3997,11 +4872,18 @@
     // 精英饰品
     if (tier === "elite" && !flash) drawEliteOrnament(e, rad);
     // Boss 冠铠已在 drawEnemyBoss；再加深紫描边强化
-    if (tier === "boss") {
+    if (tier === "boss" && !e.chapterBoss) {
       ctx.beginPath();
       ctx.arc(0, 0, rad * 1.02, 0, Math.PI * 2);
       ctx.strokeStyle = "rgba(200,40,100,0.65)";
       ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    if (e.chapterBoss && e.shield > 0) {
+      ctx.beginPath();
+      ctx.arc(0, 0, rad * 1.2, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255,236,179,0.9)";
+      ctx.lineWidth = 3;
       ctx.stroke();
     }
 
@@ -4335,8 +5217,127 @@
     ctx.restore();
   }
 
+  /** 章节首领：四种轮廓，和普通 Boss 的角冠尸分开 */
+  function drawChapterBoss(e, rad, flash, slow, now) {
+    const slot = e.chapterId || 1;
+    const pulse = 1 + Math.sin(now * 3) * 0.05;
+    const pal = [
+      null,
+      { fill: "#c4a15a", edge: "#5a4018", glow: "rgba(210,170,70,0.35)", mark: "#ffe082" },
+      { fill: "#8aa4b4", edge: "#24343e", glow: "rgba(180,200,214,0.4)", mark: "#e3f2fd" },
+      { fill: "#e07040", edge: "#4a180c", glow: "rgba(255,100,40,0.4)", mark: "#ffcc80" },
+      { fill: "#d7ecf8", edge: "#1a3a50", glow: "rgba(220,240,255,0.5)", mark: "#ffffff" },
+    ][slot] || { fill: "#aaa", edge: "#333", glow: "rgba(255,255,255,0.3)", mark: "#fff" };
+    ctx.beginPath();
+    ctx.arc(0, 0, rad * 1.35 * pulse, 0, Math.PI * 2);
+    ctx.fillStyle = pal.glow;
+    ctx.fill();
+    if (slot === 2) {
+      ctx.beginPath();
+      ctx.ellipse(0, 0, rad * 1.15, rad * 0.72, 0, 0, Math.PI * 2);
+      ctx.fillStyle = flash ? "#fff" : pal.fill;
+      ctx.fill();
+      ctx.strokeStyle = pal.edge;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.strokeStyle = pal.mark;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, rad * 0.15, rad * 0.38, 0.2, Math.PI - 0.2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, rad * 0.45);
+      ctx.lineTo(0, rad * 0.85);
+      ctx.stroke();
+    } else if (slot === 3) {
+      ctx.beginPath();
+      ctx.moveTo(0, -rad * 1.25);
+      ctx.lineTo(rad * 0.7, rad * 0.15);
+      ctx.lineTo(rad * 0.35, rad * 0.95);
+      ctx.lineTo(-rad * 0.35, rad * 0.95);
+      ctx.lineTo(-rad * 0.7, rad * 0.15);
+      ctx.closePath();
+      ctx.fillStyle = flash ? "#fff" : pal.fill;
+      ctx.fill();
+      ctx.strokeStyle = pal.edge;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.strokeStyle = pal.mark;
+      ctx.beginPath();
+      ctx.moveTo(-rad * 0.15, -rad * 0.2);
+      ctx.lineTo(rad * 0.2, rad * 0.55);
+      ctx.moveTo(rad * 0.1, -rad * 0.45);
+      ctx.lineTo(-rad * 0.05, rad * 0.2);
+      ctx.stroke();
+    } else if (slot === 4) {
+      ctx.beginPath();
+      ctx.moveTo(0, -rad * 1.35);
+      ctx.lineTo(rad * 0.55, -rad * 0.15);
+      ctx.lineTo(rad * 0.28, rad * 0.9);
+      ctx.lineTo(-rad * 0.28, rad * 0.9);
+      ctx.lineTo(-rad * 0.55, -rad * 0.15);
+      ctx.closePath();
+      ctx.fillStyle = flash ? "#fff" : pal.fill;
+      ctx.fill();
+      ctx.strokeStyle = pal.edge;
+      ctx.lineWidth = 2.4;
+      ctx.stroke();
+      if ((e.shield || 0) > 0) {
+        ctx.strokeStyle = "rgba(255,255,255,0.85)";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, rad * 1.15, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    } else {
+      ctx.beginPath();
+      ctx.ellipse(0, rad * 0.05, rad * 1.05, rad * 0.82, 0, 0, Math.PI * 2);
+      ctx.fillStyle = flash ? "#fff" : pal.fill;
+      ctx.fill();
+      ctx.strokeStyle = pal.edge;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.fillStyle = pal.mark;
+      ctx.beginPath();
+      ctx.moveTo(-rad * 0.7, -rad * 0.15);
+      ctx.lineTo(-rad * 1.15, -rad * 0.55);
+      ctx.lineTo(-rad * 0.35, -rad * 0.35);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(rad * 0.7, -rad * 0.15);
+      ctx.lineTo(rad * 1.15, -rad * 0.55);
+      ctx.lineTo(rad * 0.35, -rad * 0.35);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.fillStyle = flash ? "#333" : "#1a120c";
+    ctx.beginPath();
+    ctx.arc(-rad * 0.22, -rad * 0.05, rad * 0.12, 0, Math.PI * 2);
+    ctx.arc(rad * 0.22, -rad * 0.05, rad * 0.12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = pal.mark;
+    ctx.beginPath();
+    ctx.arc(-rad * 0.18, -rad * 0.07, rad * 0.05, 0, Math.PI * 2);
+    ctx.arc(rad * 0.26, -rad * 0.07, rad * 0.05, 0, Math.PI * 2);
+    ctx.fill();
+    if (e.laneSwitch) {
+      ctx.strokeStyle = e.laneFast ? "rgba(255,255,255,0.8)" : "rgba(120,160,190,0.7)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash(e.laneFast ? [] : [4, 4]);
+      ctx.beginPath();
+      ctx.arc(0, 0, rad * (e.laneFast ? 1.45 : 1.2), now, now + 1.4);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
   /** Boss 尸：脉动光环 + 角冠 + 多层甲 */
   function drawEnemyBoss(e, rad, flash, slow, now) {
+    if (e.chapterBoss) {
+      drawChapterBoss(e, rad, flash, slow, now);
+      return;
+    }
     const fill = zFill(e.color, flash, slow);
     const pulse = 1 + Math.sin(now * 3) * 0.06;
     // 多层光环
@@ -4727,9 +5728,28 @@
       ctx.fillRect(bx + 1, by + 1, Math.max(0, bw * ratio - 2), 1.5);
     }
     if (tier === "boss") {
-      ctx.strokeStyle = "rgba(200,80,140,0.75)";
+      ctx.strokeStyle = e.chapterBoss ? "rgba(255,224,130,0.9)" : "rgba(200,80,140,0.75)";
       ctx.lineWidth = 1.5;
       ctx.strokeRect(bx - 0.5, by - 0.5, bw + 1, bh + 1);
+      if (e.chapterBoss) {
+        ctx.font = `700 ${Math.max(9, bh + 4)}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "rgba(0,0,0,0.75)";
+        const phase = e.bossPhase === 3 ? "Ⅲ" : e.bossPhase === 2 ? "Ⅱ" : "Ⅰ";
+        const label = `${e.bossName || "章节首领"} ${phase}`;
+        ctx.strokeText(label, e.x, by - 2);
+        ctx.fillStyle = "#ffe082";
+        ctx.fillText(label, e.x, by - 2);
+        if (e.shieldMax > 0) {
+          const sy = by - 7;
+          ctx.fillStyle = "rgba(0,0,0,0.45)";
+          ctx.fillRect(bx, sy, bw, 3);
+          ctx.fillStyle = "#fff8e1";
+          ctx.fillRect(bx, sy, bw * Math.max(0, e.shield / e.shieldMax), 3);
+        }
+      }
     } else if (tier === "elite") {
       ctx.strokeStyle = "rgba(255,224,130,0.45)";
       ctx.lineWidth = 1;
@@ -4767,6 +5787,8 @@
   const save0 = loadSave();
   menuDiff = save0.lastDiff;
   menuMap = save0.lastMap | 0;
+  menuTint = tintUnlocked(save0.lastTint) ? (save0.lastTint | 0) : 0;
+  state.tintChapter = menuTint;
   setupLevel(save0.lastLevel || 1, menuDiff, { mapIndex: menuMap });
   resize();
   updateHUD();
@@ -4800,6 +5822,19 @@
     returnToDifficultySelect,
     sceneSkinFor,
     SCENE_SKINS,
+    CHAPTERS,
+    chapterOf,
+    Tower,
+    Enemy,
+    EVO_DEFS,
+    matchRecipe,
+    mergeBlockReason,
+    applyEvolution,
+    damageEnemy,
+    initChapterBoss,
+    tickChapterBoss,
+    tintUnlocked,
+    recipeKnown,
     get menuMap() { return menuMap; },
   };
 })();
