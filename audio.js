@@ -25,6 +25,14 @@
   let audible = false;
   let pulsesOn = false;
   let pulseGen = 0;
+  let bgmDuck = null;
+  let chapterId = "dust";
+  let pausedDuck = false;
+  let musicGen = 0;
+  let musicOn = false;
+  let bgmNodes = [];
+  let pumpTimer = null;
+  let nextAt = 0;
 
   try {
     muted = localStorage.getItem(STORAGE_KEY) === "1";
@@ -103,8 +111,11 @@
 
       bgmBus = ctx.createGain();
       bgmBus.gain.value = 0;
+      bgmDuck = ctx.createGain();
+      bgmDuck.gain.value = 1;
       sfxBus = ctx.createGain();
       sfxBus.gain.value = 1;
+      bgmDuck.connect(bgmBus);
       bgmBus.connect(master);
       sfxBus.connect(master);
 
@@ -142,7 +153,7 @@
     bgmBus.gain.cancelScheduledValues(t);
     bgmBus.gain.setValueAtTime(0.0001, t);
     // 背景明显低于音效总线（音效走 sfxBus ≈ 1）
-    bgmBus.gain.linearRampToValueAtTime(0.22, t + 0.9);
+    bgmBus.gain.linearRampToValueAtTime(0.15, t + 0.9);
   }
 
   function tone(opts) {
@@ -229,6 +240,268 @@
     ng.connect(bgmBus);
     src.start(time);
     src.stop(time + 0.2);
+  }
+
+  function midi(n) {
+    return 440 * Math.pow(2, (n - 69) / 12);
+  }
+
+  /** 四章各约 30s：拍数×60/bpm = 30。音量进 bgmDuck，再被 bgmBus≈0.15 压低，低于音效。 */
+  const TRACKS = {
+    dust: {
+      bpm: 96,
+      drum: "march",
+      lead: "triangle",
+      leadPeak: 0.045,
+      wind: 280,
+      windGain: 0.02,
+      chords: [
+        [50, 53, 57], [46, 50, 53], [53, 57, 60], [48, 52, 55],
+        [50, 53, 57], [55, 58, 62], [57, 60, 64], [50, 53, 57],
+        [50, 53, 57], [46, 50, 53], [48, 52, 55], [50, 53, 57],
+      ],
+      motif: [74, 77, 74, 72, 69, 72, 74, 77, 74, 72, 69, 65],
+    },
+    frost: {
+      bpm: 72,
+      drum: "soft",
+      lead: "sine",
+      leadPeak: 0.04,
+      melodyEvery: 2,
+      wind: 1400,
+      windGain: 0.012,
+      chords: [
+        [57, 60, 64], [53, 57, 60], [60, 64, 67], [55, 59, 62],
+        [57, 60, 64], [62, 65, 69], [64, 68, 71], [57, 60, 64],
+        [57, 60, 64],
+      ],
+      motif: [81, 84, 88, 84, 81, 79, 76, 79, 81, null, 76, 72],
+    },
+    rift: {
+      bpm: 112,
+      drum: "drive",
+      lead: "square",
+      leadPeak: 0.03,
+      melodyEvery: 1,
+      wind: 400,
+      windGain: 0.01,
+      chords: [
+        [52, 55, 59], [53, 57, 60], [52, 55, 59], [48, 52, 55],
+        [52, 56, 59], [53, 57, 60], [50, 53, 57], [52, 55, 59],
+        [52, 55, 59], [53, 56, 60], [52, 55, 59], [47, 52, 55],
+        [52, 55, 59], [53, 57, 60],
+      ],
+      motif: [71, 72, 71, 67, 64, 67, 71, 74, 72, 71, 67, 64],
+    },
+    night: {
+      bpm: 80,
+      drum: "war",
+      lead: "triangle",
+      leadPeak: 0.035,
+      melodyEvery: 2,
+      wind: 180,
+      windGain: 0.018,
+      chords: [
+        [48, 51, 55], [44, 48, 51], [41, 44, 48], [43, 47, 50],
+        [48, 51, 55], [44, 48, 51], [46, 50, 53], [43, 47, 50],
+        [41, 44, 48], [48, 51, 55],
+      ],
+      motif: [67, 70, 67, 63, 60, 63, 67, 70, 72, 70, 67, 63],
+    },
+  };
+
+  function trackNote(when, dur, freq, type, peak) {
+    if (!ctx || !bgmDuck) return;
+    const osc = ctx.createOscillator();
+    osc.type = type || "sine";
+    const f = Math.max(30, freq);
+    osc.frequency.setValueAtTime(f, when);
+    const g = ctx.createGain();
+    const d = Math.max(0.06, dur);
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), when + Math.min(0.05, d * 0.28));
+    g.gain.exponentialRampToValueAtTime(0.0001, when + d);
+    if (type === "square" || type === "sawtooth") {
+      const filt = ctx.createBiquadFilter();
+      filt.type = "lowpass";
+      filt.frequency.setValueAtTime(type === "square" ? 1200 : 800, when);
+      osc.connect(filt);
+      filt.connect(g);
+    } else {
+      osc.connect(g);
+    }
+    g.connect(bgmDuck);
+    osc.start(when);
+    osc.stop(when + d + 0.03);
+    bgmNodes.push({ node: osc, until: when + d + 0.05 });
+  }
+
+  function trackKick(when, peak) {
+    if (!ctx || !bgmDuck) return;
+    const o = ctx.createOscillator();
+    o.type = "sine";
+    o.frequency.setValueAtTime(128, when);
+    o.frequency.exponentialRampToValueAtTime(40, when + 0.14);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak || 0.12), when + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + 0.2);
+    o.connect(g);
+    g.connect(bgmDuck);
+    o.start(when);
+    o.stop(when + 0.22);
+    bgmNodes.push({ node: o, until: when + 0.24 });
+  }
+
+  function trackHat(when, peak) {
+    if (!ctx || !bgmDuck || !noiseBuf) return;
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf;
+    const f = ctx.createBiquadFilter();
+    f.type = "highpass";
+    f.frequency.value = 4000;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak || 0.03), when + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + 0.05);
+    src.connect(f);
+    f.connect(g);
+    g.connect(bgmDuck);
+    src.start(when);
+    src.stop(when + 0.06);
+    bgmNodes.push({ node: src, until: when + 0.08 });
+  }
+
+  function scheduleTrack(track, t0) {
+    const beat = 60 / track.bpm;
+    const bar = beat * 4;
+    const bars = track.chords.length;
+    for (let i = 0; i < bars; i++) {
+      const t = t0 + i * bar;
+      const chord = track.chords[i];
+      for (let v = 0; v < chord.length; v++) {
+        trackNote(t, bar * 0.94, midi(chord[v]), v === 0 ? "triangle" : "sine", v === 0 ? 0.05 : 0.028);
+        if (v === 0) trackNote(t, Math.min(bar * 0.55, beat * 2), midi(chord[v] - 12), "sine", 0.08);
+      }
+    }
+    const step = track.melodyEvery || 2;
+    const count = Math.floor((bars * 4) / step);
+    for (let i = 0; i < count; i++) {
+      const m = track.motif[i % track.motif.length];
+      if (m == null) continue;
+      trackNote(t0 + i * beat * step, beat * step * 0.8, midi(m), track.lead || "triangle", track.leadPeak || 0.04);
+    }
+    const beats = bars * 4;
+    for (let i = 0; i < beats; i++) {
+      const t = t0 + i * beat;
+      if (track.drum === "march") {
+        if (i % 2 === 0) trackKick(t, i % 4 === 0 ? 0.15 : 0.08);
+        else trackHat(t, 0.025);
+      } else if (track.drum === "soft") {
+        if (i % 4 === 0) trackKick(t, 0.06);
+      } else if (track.drum === "drive") {
+        trackKick(t, i % 4 === 0 ? 0.13 : 0.07);
+        if (i % 2 === 1) trackHat(t, 0.03);
+      } else if (track.drum === "war") {
+        if (i % 4 === 0) trackKick(t, 0.16);
+        else if (i % 4 === 2) trackKick(t, 0.07);
+      }
+    }
+    return bars * bar;
+  }
+
+  function stopMusic() {
+    musicGen++;
+    musicOn = false;
+    if (pumpTimer) {
+      clearTimeout(pumpTimer);
+      pumpTimer = null;
+    }
+    for (const item of bgmNodes) {
+      try { item.node.stop(); } catch (_) {}
+      try { item.node.disconnect(); } catch (_) {}
+    }
+    bgmNodes = [];
+    nextAt = 0;
+  }
+
+  function startWind(track) {
+    if (!ctx || !noiseBuf || !bgmDuck || !track || !track.wind) return;
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf;
+    src.loop = true;
+    const f = ctx.createBiquadFilter();
+    f.type = track.wind > 1000 ? "highpass" : "lowpass";
+    f.frequency.value = track.wind;
+    const g = ctx.createGain();
+    g.gain.value = track.windGain || 0.015;
+    src.connect(f);
+    f.connect(g);
+    g.connect(bgmDuck);
+    src.start();
+    bgmNodes.push({ node: src, until: null });
+  }
+
+  function pruneNodes() {
+    if (!ctx) return;
+    const now = ctx.currentTime - 0.3;
+    const keep = [];
+    for (const item of bgmNodes) {
+      if (item.until != null && item.until < now) {
+        try { item.node.disconnect(); } catch (_) {}
+      } else keep.push(item);
+    }
+    bgmNodes = keep;
+  }
+
+  function pumpMusic(gen) {
+    if (gen !== musicGen || !ctx || !TRACKS[chapterId]) return;
+    pruneNodes();
+    const now = ctx.currentTime;
+    if (nextAt < now + 0.05) nextAt = now + 0.06;
+    let guard = 0;
+    while (nextAt < now + 32 && guard < 4) {
+      const dur = scheduleTrack(TRACKS[chapterId], nextAt);
+      if (!(dur > 0)) break;
+      nextAt += dur;
+      guard++;
+    }
+    pumpTimer = setTimeout(() => pumpMusic(gen), 1000);
+  }
+
+  function restartChapterMusic() {
+    const id = TRACKS[chapterId] ? chapterId : "dust";
+    chapterId = id;
+    stopMusic();
+    if (!ctx || !bgmDuck || muted) return;
+    musicOn = true;
+    const gen = musicGen;
+    nextAt = 0;
+    startWind(TRACKS[id]);
+    pumpMusic(gen);
+    applyDuck();
+  }
+
+  function applyDuck() {
+    if (!ctx || !bgmDuck) return;
+    const t = ctx.currentTime;
+    const cur = bgmDuck.gain.value;
+    bgmDuck.gain.cancelScheduledValues(t);
+    bgmDuck.gain.setValueAtTime(Math.max(0.0001, cur || 0.0001), t);
+    bgmDuck.gain.linearRampToValueAtTime(pausedDuck ? 0.0001 : 1, t + 0.22);
+  }
+
+  function setChapter(id) {
+    const next = TRACKS[id] ? id : "dust";
+    if (next === chapterId && musicOn) return;
+    chapterId = next;
+    if (!ctx || muted || !gestureSeen) return;
+    try { restartChapterMusic(); } catch (_) {}
+  }
+
+  function setBgmPaused(on) {
+    pausedDuck = !!on;
+    try { applyDuck(); } catch (_) {}
   }
 
   function startPulses() {
@@ -328,12 +601,10 @@
     if (!c || muted || failed) return false;
     try {
       if (!started) {
-        startBgm();
         started = true;
         fadeBgmIn();
-      } else if (!pulsesOn) {
-        startPulses();
       }
+      if (!musicOn) restartChapterMusic();
       if (!audible) {
         audible = true;
         setMaster(true);
@@ -606,6 +877,13 @@
     play,
     playShot,
     toggle,
+    setChapter,
+    setPaused: setBgmPaused,
+    trackSeconds(id) {
+      const t = TRACKS[id];
+      if (!t) return 0;
+      return t.chords.length * 4 * (60 / t.bpm);
+    },
     isMuted() {
       return muted;
     },

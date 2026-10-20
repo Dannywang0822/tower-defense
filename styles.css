@@ -106,14 +106,6 @@ html, body {
 .hud-item[title="生命"] { color: #ef9a9a; }
 .hud-item[title="金币"] { color: var(--gold); }
 .hud-item[title="波次"] { color: #aed581; }
-.hud-chapter {
-  max-width: 7.2em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 11px;
-  color: #e6d3a3;
-}
-.hud-chapter span { overflow: hidden; text-overflow: ellipsis; }
 .hud-icon { font-size: 11px; opacity: 0.95; line-height: 1; }
 .hud-status {
   margin-left: auto;
@@ -391,16 +383,9 @@ html, body {
 .action-btn:disabled { opacity: 0.4; cursor: not-allowed; filter: none; box-shadow: none; }
 .wave-btn {
   background: linear-gradient(135deg, #3e4a28, #689f38);
-  flex: 1 1 auto;
-  width: auto;
+  width: 100%;
   box-shadow: 0 2px 12px rgba(104, 159, 56, 0.3);
   letter-spacing: 0.02em;
-}
-.codex-btn {
-  flex: 0 0 auto;
-  min-width: 56px;
-  padding-left: 8px;
-  padding-right: 8px;
 }
 .wave-btn:hover { filter: brightness(1.08); }
 .wave-btn.waiting {
@@ -564,25 +549,7 @@ html, body {
   text-shadow: 0 0 18px rgba(212, 175, 85, 0.4);
   margin-bottom: 4px;
 }
-.start-sub { color: var(--muted); font-size: 13px; margin-bottom: 6px; }
-.start-chapter {
-  font-size: 16px;
-  font-weight: 800;
-  color: #e6c878;
-  margin: 0 0 8px;
-  letter-spacing: 0.04em;
-}
-.tint-btns {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 4px;
-}
-.tint-btn { font-size: 12px; min-height: 34px; padding: 4px 2px; }
-.tint-btn.locked,
-.tint-btn:disabled {
-  opacity: 0.38;
-  cursor: not-allowed;
-}
+.start-sub { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
 .start-section-title {
   text-align: left;
   font-size: 12px;
@@ -671,11 +638,26 @@ html, body {
   #hud-diff-wrap { display: none; }
 }
 
-/* 章节地貌压过地图饰物的边框色，保证章节一眼可辨 */
-body[data-chapter="1"] #stage-wrap { border-color: #a68448; }
-body[data-chapter="2"] #stage-wrap { border-color: #7f96a6; }
-body[data-chapter="3"] #stage-wrap { border-color: #e06830; }
-body[data-chapter="4"] #stage-wrap { border-color: #b7d4ea; }
+/* v14: stage frame tint only — HUD, pause, and speed controls stay as shipped */
+body[data-decor="fog"] #stage-wrap { border-color: #6a6880; }
+body[data-decor="snow"] #stage-wrap { border-color: #7f93a8; }
+body[data-decor="lava"] #stage-wrap { border-color: #8a4a32; }
+body[data-decor="toxic"] #stage-wrap { border-color: #5e7a48; }
+
+/* v20: 章节主题压过地图皮的边框，雾在画布上另画 */
+body[data-chapter="dust"] #hud,
+body[data-chapter="dust"] #stage-wrap { border-color: #a6844e; }
+body[data-chapter="frost"] #hud,
+body[data-chapter="frost"] #stage-wrap { border-color: #7eb8c4; }
+body[data-chapter="rift"] #hud,
+body[data-chapter="rift"] #stage-wrap { border-color: #7e57c2; }
+body[data-chapter="night"] #hud,
+body[data-chapter="night"] #stage-wrap { border-color: #8e3a3a; }
+body[data-chapter="dust"] .ch-name { color: #e6c48a; }
+body[data-chapter="frost"] .ch-name { color: #d7f3f7; }
+body[data-chapter="rift"] .ch-name { color: #d1c4e9; }
+body[data-chapter="night"] .ch-name { color: #ffab91; }
+.ch-name { font-weight: 700; }
 
 
 /* ---- v16 技能 / 合成 / 专精 ---- */
@@ -859,47 +841,6 @@ body[data-chapter="4"] #stage-wrap { border-color: #b7d4ea; }
   .hud-item[title="难度"], .hud-status { display: none; }
   .skill-btn { min-width: 36px; padding: 2px 4px; }
   .tower-btn .tb-desc { display: none; }
-}
-
-/* v20 配方图鉴 */
-#codex-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 48;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(8, 6, 4, 0.78);
-  padding: 12px;
-}
-#codex-overlay.hidden { display: none !important; }
-.codex-card {
-  max-width: 360px;
-  width: min(360px, 100%);
-  max-height: min(86dvh, 560px);
-  overflow-y: auto;
-}
-.codex-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 12px; text-align: left; }
-.codex-row {
-  border: 1px solid rgba(212, 175, 85, 0.35);
-  border-radius: 10px;
-  padding: 8px 10px;
-  background: rgba(0, 0, 0, 0.28);
-}
-.codex-row.locked { opacity: 0.72; border-style: dashed; }
-.codex-name { font-weight: 800; color: #ffe082; font-size: 14px; }
-.codex-badge {
-  font-size: 10px;
-  font-weight: 700;
-  margin-left: 6px;
-  color: #c5e1a5;
-}
-.codex-row.locked .codex-badge { color: #bcaaa4; }
-.codex-hint, .codex-blurb, .codex-lock { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.codex-lock { color: #a1887f; }
-
-@media (max-width: 360px) {
-  .hud-chapter { max-width: 4.4em; }
 }
 
 /* 矮竖屏再压一层 */

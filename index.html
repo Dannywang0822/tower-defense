@@ -23,9 +23,6 @@
           <span class="hud-icon">🏛</span>
           <span id="hud-level">1/1000</span>
         </div>
-        <div class="hud-item hud-chapter" title="章节">
-          <span id="hud-chapter">荒原哨站</span>
-        </div>
         <div class="hud-item" title="波次">
           <span class="hud-icon">🧟</span>
           <span id="hud-wave">0/30</span>
@@ -75,7 +72,7 @@
             <span class="tb-desc">减速</span>
           </button>
         </div>
-        <p class="hint">点空地筑塔 · 拖同星合成 · 材料拖到 3★ 进化</p>
+        <p class="hint">点空地筑塔 · 拖拽合成 · 3★ 配方可拖进化</p>
       </div>
 
       <div id="select-panel" class="panel-block hidden">
@@ -91,7 +88,6 @@
 
       <div class="panel-block wave-block">
         <button type="button" class="action-btn wave-btn" id="btn-next-wave">开始第 1 波</button>
-        <button type="button" class="action-btn ghost codex-btn" id="btn-codex">配方</button>
       </div>
     </aside>
 
@@ -99,7 +95,6 @@
       <div class="overlay-card start-card">
         <h2>路卫</h2>
         <p class="start-sub">Coinpath Defense · 1000 关战役</p>
-        <p id="start-chapter" class="start-chapter">第 1 章 · 荒原哨站</p>
         <div class="start-section-title">难度</div>
         <div id="start-diff-btns" class="diff-btns" role="group" aria-label="难度">
           <button type="button" class="diff-btn active" data-diff="patrol" title="血×1 速×1">巡城</button>
@@ -114,14 +109,6 @@
           <button type="button" class="map-btn" data-map="2" data-decor="snow" title="冰霜雪原">雪原</button>
           <button type="button" class="map-btn" data-map="3" data-decor="lava" title="熔岩裂隙">熔岩</button>
           <button type="button" class="map-btn" data-map="4" data-decor="toxic" title="毒沼荒原">毒沼</button>
-        </div>
-        <div class="start-section-title">章节色 <span class="start-level-cap">通关解锁妆点</span></div>
-        <div id="start-tint-btns" class="tint-btns" role="group" aria-label="章节色">
-          <button type="button" class="map-btn tint-btn active" data-tint="0">随章</button>
-          <button type="button" class="map-btn tint-btn" data-tint="1">荒原</button>
-          <button type="button" class="map-btn tint-btn" data-tint="2">雾港</button>
-          <button type="button" class="map-btn tint-btn" data-tint="3">熔城</button>
-          <button type="button" class="map-btn tint-btn" data-tint="4">霜冠</button>
         </div>
         <div class="start-section-title">关卡 <span class="start-level-cap">（最高 <span id="start-level-max">1</span>）</span></div>
         <div class="level-row">
@@ -143,17 +130,6 @@
         <div class="end-actions">
           <button type="button" class="action-btn primary" id="btn-skill-confirm" disabled>确认出征</button>
           <button type="button" class="action-btn ghost" id="btn-skill-cancel">返回</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="codex-overlay" class="hidden">
-      <div class="overlay-card codex-card">
-        <h2>进化配方</h2>
-        <p class="pause-msg">把材料塔拖到符合配方的 3★ 目标上。通关第 1 章后图鉴全部点亮；未通关时拖对材料也会发现。</p>
-        <div id="codex-list" class="codex-list"></div>
-        <div class="end-actions">
-          <button type="button" class="action-btn primary" id="btn-codex-close">关闭</button>
         </div>
       </div>
     </div>
