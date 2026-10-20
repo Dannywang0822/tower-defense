@@ -1503,97 +1503,53 @@
     if (btnSkillMeteor) btnSkillMeteor.classList.remove("aiming");
   }
 
+  function mergeBlockReason(src, dst) {
+    if (!src || !dst || src === dst) return "无效目标";
+    if (src.type !== dst.type) return "需同种塔";
+    if ((src.star || 1) !== (dst.star || 1)) return "需同星级";
+    if (dst.star >= 3) return "已满 3 星";
+    if (src.level < MERGE_MIN_LEVEL || dst.level < MERGE_MIN_LEVEL) return `双方需 Lv≥${MERGE_MIN_LEVEL}`;
+    return "";
+  }
   function canMergeCandidate(anchor, t) {
-    if (!anchor || !t || t === anchor) return false;
-    if (t.type !== anchor.type) return false;
-    if (t.star !== anchor.star) return false;
-    if (anchor.star >= 3) return false;
-    if (t.level < MERGE_MIN_LEVEL || anchor.level < MERGE_MIN_LEVEL) return false;
-    return true;
+    return !mergeBlockReason(t, anchor);
   }
-
   function countMergePartners(anchor) {
-    if (!anchor || anchor.star >= 3 || anchor.level < MERGE_MIN_LEVEL) return 0;
-    return state.towers.filter((t) => canMergeCandidate(anchor, t)).length;
+    if (!anchor) return 0;
+    return state.towers.filter((t) => t !== anchor && canMergeCandidate(anchor, t)).length;
   }
-
   function enterMergeMode() {
-    const a = state.selected;
-    if (!a) return;
-    if (a.star >= 3) {
-      toast("已满 3 星");
-      return;
-    }
-    if (a.level < MERGE_MIN_LEVEL) {
-      toast(`合成需自身 Lv≥${MERGE_MIN_LEVEL}`);
-      return;
-    }
-    if (countMergePartners(a) < 2) {
-      toast(`需要另外 2 座同种同星且 Lv≥${MERGE_MIN_LEVEL} 的塔`);
-      return;
-    }
-    state.mergeMode = true;
-    state.mergePicks = [];
-    state.buildType = null;
-    state.skillAim = null;
-    if (btnMerge) btnMerge.classList.add("active");
-    toast("合成：再点选 2 座同种同星塔（可跨格）", 2200);
-    refreshSelectPanel();
+    toast("按住塔拖到另一座同种同星塔上即可合成", 2000);
   }
-
-  function performMerge(anchor, picks) {
-    const all = [anchor, ...picks];
-    const invested = all.reduce((s, t) => s + t.invested, 0);
-    const c = anchor.c;
-    const r = anchor.r;
-    const type = anchor.type;
-    const newStar = Math.min(3, anchor.star + 1);
-    const removeSet = new Set(all);
-    state.towers = state.towers.filter((t) => !removeSet.has(t));
-    const merged = new Tower(type, c, r, {
-      star: newStar,
-      level: 1,
-      invested,
-      branch: null,
-    });
+  /** 拖拽合成：3 合 1 不变。每次喂入 +1 进度，进度满 2（=3 座）升星 */
+  function feedMerge(target, src) {
+    const pips = (target.mergePips || 0) + (src.mergePips || 0) + 1;
+    const invested = target.invested + src.invested;
+    state.towers = state.towers.filter((t) => t !== src);
+    if (state.selected === src) deselect();
+    if (pips < 2) {
+      target.mergePips = pips;
+      target.invested = invested;
+      spawnParticle(target.x, target.y, "#69f0ae", 10);
+      sfx("build", target.type);
+      toast(`合成进度 ${pips + 1}/3`, 1400);
+      updateHUD();
+      return;
+    }
+    const newStar = Math.min(3, target.star + 1);
+    state.towers = state.towers.filter((t) => t !== target);
+    const merged = new Tower(target.type, target.c, target.r, { star: newStar, level: 1, invested, branch: null });
+    merged.mergePips = newStar < 3 ? pips - 2 : 0;
     state.towers.push(merged);
-    spawnParticle(merged.x, merged.y, merged.color, 16);
+    spawnParticle(merged.x, merged.y, merged.color, 18);
+    spawnParticle(merged.x, merged.y, "#ffd54f", 12);
     sfx("upgrade");
-    cancelMergeMode();
     selectTower(merged);
     toast(`合成成功：${merged.name} ${"★".repeat(newStar)}`, 2000);
-    if (newStar >= 3 && !merged.branch) {
-      openBranchPicker(merged);
-    }
+    if (newStar >= 3 && !merged.branch) openBranchPicker(merged);
     updateHUD();
   }
-
-  function tryPickMergeTower(t) {
-    const anchor = state.selected;
-    if (!state.mergeMode || !anchor) return false;
-    if (t === anchor) {
-      toast("请点另外两座材料塔");
-      return true;
-    }
-    if (!canMergeCandidate(anchor, t)) {
-      toast(`需同种同星且 Lv≥${MERGE_MIN_LEVEL}`);
-      return true;
-    }
-    if (state.mergePicks.includes(t)) {
-      state.mergePicks = state.mergePicks.filter((x) => x !== t);
-      toast(`已取消材料（${state.mergePicks.length}/2）`);
-      refreshSelectPanel();
-      return true;
-    }
-    state.mergePicks.push(t);
-    if (state.mergePicks.length >= 2) {
-      performMerge(anchor, state.mergePicks.slice(0, 2));
-    } else {
-      toast(`已选材料 ${state.mergePicks.length}/2`, 1200);
-      refreshSelectPanel();
-    }
-    return true;
-  }
+  function tryPickMergeTower() { return false; }
 
   function openBranchPicker(tower) {
     if (!branchOverlay || !tower || tower.star < 3) return;
@@ -1786,18 +1742,9 @@
     btnSell.disabled = state.ended || state.mergeMode;
     btnSell.textContent = `卖掉 +${t.sellValue()}`;
     if (btnMerge) {
-      const partners = countMergePartners(t);
-      const can = t.star < 3 && t.level >= MERGE_MIN_LEVEL && partners >= 2 && !state.ended;
-      btnMerge.disabled = !can && !state.mergeMode;
-      if (state.mergeMode) {
-        btnMerge.textContent = `合成中 ${state.mergePicks.length}/2 · 取消`;
-        btnMerge.classList.add("active");
-      } else {
-        btnMerge.classList.remove("active");
-        btnMerge.textContent = t.star >= 3
-          ? "已满星"
-          : `合成 ★${t.star + 1}（需2座 Lv≥${MERGE_MIN_LEVEL}）`;
-      }
+      btnMerge.classList.remove("active");
+      btnMerge.disabled = t.star >= 3;
+      btnMerge.textContent = t.star >= 3 ? "已满星" : `拖拽合成 ${(t.mergePips||0)+1}/3（Lv≥${MERGE_MIN_LEVEL}）`;
     }
   }
 
@@ -1846,17 +1793,9 @@
 
     const existing = towerAt(c, r);
     if (existing) {
-      if (state.mergeMode) {
-        tryPickMergeTower(existing);
-        sfx("click");
-        return;
-      }
-      selectTower(existing);
-      sfx("click");
-      return;
-    }
-    if (state.mergeMode) {
-      toast("请点选另外两座同种同星塔");
+      // 按下塔：可能是轻点（打开面板）也可能是拖拽合成
+      state.drag = { tower: existing, sx: x, sy: y, x, y, moved: false, pid: e.pointerId };
+      try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
       return;
     }
     if (state.buildType) {
@@ -1884,24 +1823,52 @@
   }
 
   function onPointerMove(e) {
-    const ev = e.touches ? e.touches[0] : e;
-    if (!ev) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = ((ev.clientX - rect.left) / rect.width) * canvas.width;
-    const y = ((ev.clientY - rect.top) / rect.height) * canvas.height;
-    state.hoverCell = {
-      c: Math.floor(x / cellSize),
-      r: Math.floor(y / cellSize),
-    };
+    const { c, r, x, y } = pointerToCell(e);
+    state.hoverCell = { c, r };
+    const d = state.drag;
+    if (d) {
+      d.x = x;
+      d.y = y;
+      if (!d.moved && dist(x, y, d.sx, d.sy) > cellSize * 0.35) {
+        d.moved = true;
+        if (state.selected) deselect();
+        toast("拖到同种同星且 Lv≥" + MERGE_MIN_LEVEL + " 的塔上合成", 1400);
+      }
+    }
   }
 
-  canvas.addEventListener("mousedown", onPointerDown);
-  canvas.addEventListener("touchstart", onPointerDown, { passive: false });
-  canvas.addEventListener("mousemove", onPointerMove);
-  canvas.addEventListener("touchmove", (e) => {
-    e.preventDefault();
-    onPointerMove(e);
-  }, { passive: false });
+  function onPointerUp(e) {
+    const d = state.drag;
+    if (!d) return;
+    state.drag = null;
+    try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+    if (!state.towers.includes(d.tower)) return;
+    if (!d.moved) {
+      selectTower(d.tower);
+      sfx("click");
+      return;
+    }
+    const c = Math.floor(d.x / cellSize);
+    const r = Math.floor(d.y / cellSize);
+    const target = towerAt(c, r);
+    if (!target || target === d.tower) {
+      toast("已放回原位");
+      return;
+    }
+    const why = mergeBlockReason(d.tower, target);
+    if (why) {
+      toast(why, 1600);
+      sfx("click");
+      return;
+    }
+    feedMerge(target, d.tower);
+  }
+
+  canvas.addEventListener("pointerdown", onPointerDown);
+  canvas.addEventListener("pointermove", onPointerMove);
+  canvas.addEventListener("pointerup", onPointerUp);
+  canvas.addEventListener("pointercancel", () => { state.drag = null; });
+  canvas.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
   const stage = document.getElementById("stage-wrap");
   if (stage) {
     stage.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
@@ -2542,6 +2509,30 @@
     }
 
     for (const t of state.towers) drawTower(t);
+    if (state.drag && state.drag.moved && state.towers.includes(state.drag.tower)) {
+      const d = state.drag, src = d.tower;
+      for (const t of state.towers) {
+        if (t === src) continue;
+        const ok = !mergeBlockReason(src, t);
+        if (!ok && t.type !== src.type) continue;
+        ctx.save();
+        ctx.strokeStyle = ok ? "#69f0ae" : "#ff5252";
+        ctx.lineWidth = 3; ctx.shadowColor = ctx.strokeStyle; ctx.shadowBlur = 10;
+        ctx.strokeRect(t.x - cellSize * 0.46, t.y - cellSize * 0.46, cellSize * 0.92, cellSize * 0.92);
+        ctx.restore();
+      }
+      const hov = towerAt(Math.floor(d.x / cellSize), Math.floor(d.y / cellSize));
+      const valid = hov && hov !== src && !mergeBlockReason(src, hov);
+      ctx.save();
+      ctx.globalAlpha = 0.35; ctx.strokeStyle = "#fff"; ctx.setLineDash([4, 4]);
+      ctx.strokeRect(src.x - cellSize * 0.45, src.y - cellSize * 0.45, cellSize * 0.9, cellSize * 0.9);
+      ctx.restore();
+      const ghost = Object.assign(Object.create(Object.getPrototypeOf(src)), src, { x: d.x, y: d.y - cellSize * 0.3 });
+      drawTower(ghost, cellSize, 0.75);
+      ctx.beginPath(); ctx.arc(d.x, d.y - cellSize * 0.3, cellSize * 0.5, 0, Math.PI * 2);
+      ctx.strokeStyle = valid ? "#69f0ae" : (hov && hov !== src ? "#ff5252" : "rgba(255,255,255,0.6)");
+      ctx.lineWidth = 2.5; ctx.stroke();
+    }
 
     // 援军
     for (const a of state.allies) {
@@ -3051,223 +3042,293 @@
     }
   }
 
-  function drawTowerLevelMarks(t, s) {
-    if (t.level <= 1) return;
-    const n = t.level - 1;
+  // ---------- v17 塔外观：等级=材质/层数，星级=饰件/光环，专精=专属部件 ----------
+  const TOWER_MAT = [
+    null,
+    { name: "wood", body: "#8a6440", dark: "#4a3020", line: "#2e1d10", trim: "#b98a55" },
+    { name: "stone", body: "#9a958a", dark: "#55514a", line: "#2f2c28", trim: "#c9c2b4" },
+    { name: "metal", body: "#6f7c8c", dark: "#2f3846", line: "#141a22", trim: "#ffd54f" },
+  ];
+  const TOWER_ID = {
+    arrow: { main: "#7cb342", light: "#c5e1a5", glow: "rgba(156,204,101," },
+    cannon: { main: "#e65100", light: "#ffab40", glow: "rgba(255,138,64," },
+    frost: { main: "#29b6f6", light: "#e1f5fe", glow: "rgba(129,212,250," },
+  };
+  function towerScale(t) {
+    return 0.8 + 0.12 * (t.level - 1) + 0.07 * ((t.star || 1) - 1);
+  }
+  function polyPath(cx, cy, rad, n, rot) {
+    ctx.beginPath();
     for (let i = 0; i < n; i++) {
-      const ox = (i - (n - 1) / 2) * s * 0.14;
-      const gy = t.y - s * 0.48;
-      // 金旗标记
-      ctx.strokeStyle = "#8d6e63";
-      ctx.lineWidth = 1.2;
+      const a = rot + (i / n) * Math.PI * 2;
+      const px = cx + Math.cos(a) * rad, py = cy + Math.sin(a) * rad;
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+  }
+  function drawStarAura(t, s, id) {
+    const st = t.star || 1;
+    if (st < 2) return;
+    const now = performance.now() / 1000;
+    const R = s * (st === 3 ? 0.47 : 0.43);
+    ctx.save();
+    ctx.lineWidth = st === 3 ? 2.6 : 1.8;
+    ctx.strokeStyle = st === 3 ? "rgba(255,213,79,0.9)" : "rgba(220,230,240,0.85)";
+    ctx.setLineDash(st === 3 ? [6, 4] : [3, 4]);
+    ctx.lineDashOffset = -now * 18;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, R, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (st === 3) {
+      const g = ctx.createRadialGradient(t.x, t.y, s * 0.1, t.x, t.y, R * 1.05);
+      g.addColorStop(0, id.glow + "0.0)");
+      g.addColorStop(1, id.glow + (0.28 + 0.12 * Math.sin(now * 3)) + ")");
+      ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.moveTo(t.x + ox, gy);
-      ctx.lineTo(t.x + ox, gy - s * 0.14);
-      ctx.stroke();
-      ctx.fillStyle = t.type === "frost" ? "#81d4fa" : t.type === "cannon" ? "#e8985a" : "#ffd54f";
-      ctx.beginPath();
-      ctx.moveTo(t.x + ox, gy - s * 0.14);
-      ctx.lineTo(t.x + ox + s * 0.1, gy - s * 0.1);
-      ctx.lineTo(t.x + ox, gy - s * 0.06);
-      ctx.closePath();
+      ctx.arc(t.x, t.y, R * 1.05, 0, Math.PI * 2);
       ctx.fill();
+      for (let i = 0; i < 4; i++) {
+        const a = now * 1.6 + (i * Math.PI) / 2;
+        ctx.fillStyle = i % 2 ? "#fff59d" : id.light;
+        ctx.beginPath();
+        ctx.arc(t.x + Math.cos(a) * R, t.y + Math.sin(a) * R, 2.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+  function drawLevelTiers(t, s, w, mat) {
+    // 底座层数 = 等级，越高越宽
+    for (let i = t.level - 1; i >= 0; i--) {
+      const ww = w * (1 + i * 0.12);
+      const yy = t.y + s * 0.08 + i * s * 0.05;
+      roundRectPath(t.x - ww / 2, yy, ww, s * 0.12, 2);
+      ctx.fillStyle = i === 0 ? mat.dark : mat.body;
+      ctx.fill();
+      ctx.strokeStyle = mat.line;
+      ctx.lineWidth = 1;
+      ctx.stroke();
     }
   }
-
   function drawTowerStars(t, s) {
-    if (!t.star || t.star <= 1) return;
-    const n = t.star;
+    const n = t.star || 1;
+    const gy = t.y + s * 0.42;
+    const col = n === 3 ? "#ffd54f" : n === 2 ? "#e0e0e0" : "#bcaaa4";
+    roundRectPath(t.x - s * 0.08 * n - 2, gy - s * 0.07, s * 0.16 * n + 4, s * 0.14, 4);
+    ctx.fillStyle = "rgba(20,16,12,0.75)";
+    ctx.fill();
     for (let i = 0; i < n; i++) {
-      const ox = (i - (n - 1) / 2) * s * 0.12;
-      const gy = t.y + s * 0.38;
-      ctx.fillStyle = "#ffd54f";
-      ctx.beginPath();
-      ctx.moveTo(t.x + ox, gy - s * 0.07);
-      ctx.lineTo(t.x + ox + s * 0.045, gy);
-      ctx.lineTo(t.x + ox, gy + s * 0.07);
-      ctx.lineTo(t.x + ox - s * 0.045, gy);
-      ctx.closePath();
+      const ox = (i - (n - 1) / 2) * s * 0.16;
+      polyPath(t.x + ox, gy, s * 0.06, 4, 0);
+      ctx.fillStyle = col;
       ctx.fill();
-      ctx.strokeStyle = "rgba(90,60,20,0.7)";
-      ctx.lineWidth = 0.8;
-      ctx.stroke();
+    }
+    if (t.mergePips) {
+      for (let i = 0; i < 2; i++) {
+        ctx.beginPath();
+        ctx.arc(t.x + s * 0.36, t.y - s * 0.12 + i * s * 0.14, s * 0.05, 0, Math.PI * 2);
+        ctx.fillStyle = i < t.mergePips ? "#69f0ae" : "rgba(0,0,0,0.5)";
+        ctx.fill();
+        ctx.strokeStyle = "#1b5e20";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
     }
     if (t.branchName) {
-      ctx.fillStyle = "rgba(255,236,179,0.92)";
-      ctx.font = `bold ${Math.max(8, s * 0.16)}px sans-serif`;
+      ctx.font = `bold ${Math.max(9, s * 0.17)}px sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "bottom";
-      ctx.fillText(t.branchName, t.x, t.y - s * 0.5);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "rgba(0,0,0,0.75)";
+      ctx.strokeText(t.branchName, t.x, t.y - s * 0.44);
+      ctx.fillStyle = "#fff3c4";
+      ctx.fillText(t.branchName, t.x, t.y - s * 0.44);
     }
+    ctx.font = `bold ${Math.max(8, s * 0.15)}px sans-serif`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = "rgba(0,0,0,0.8)";
+    ctx.strokeText("Lv" + t.level, t.x - s * 0.47, t.y - s * 0.47);
+    ctx.fillStyle = ["", "#d7ccc8", "#eeeeee", "#ffd54f"][t.level];
+    ctx.fillText("Lv" + t.level, t.x - s * 0.47, t.y - s * 0.47);
   }
-
-  function drawTower(t) {
-    const s = cellSize;
-    drawGroundShadow(t.x, t.y, s * 0.32, s * 0.28);
-    if (t.type === "arrow") drawArrowTower(t, s);
-    else if (t.type === "cannon") drawCannonTower(t, s);
-    else drawFrostTower(t, s);
-    drawTowerLevelMarks(t, s);
-    drawTowerStars(t, s);
-  }
-
-  /** 箭塔：石质箭楼 + 城垛 + 旗帜 */
-  function drawArrowTower(t, s) {
-    const bw = s * 0.52;
-    const bh = s * 0.48;
-    // 石基
-    roundRectPath(t.x - bw / 2, t.y - bh / 2, bw, bh, 3);
-    ctx.fillStyle = "#6d5c45";
-    ctx.fill();
-    ctx.strokeStyle = "#3e3428";
-    ctx.lineWidth = 1.8;
-    ctx.stroke();
-    // 砖缝
-    ctx.strokeStyle = "rgba(40,32,24,0.35)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(t.x - bw / 2 + 3, t.y);
-    ctx.lineTo(t.x + bw / 2 - 3, t.y);
-    ctx.stroke();
-    drawBattlements(t.x, t.y - bh * 0.05, bw * 0.95, bh * 0.7, 4);
-    // 绿旗
-    ctx.strokeStyle = "#5d4037";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(t.x + bw * 0.28, t.y - bh * 0.55);
-    ctx.lineTo(t.x + bw * 0.28, t.y - bh * 0.95);
-    ctx.stroke();
-    ctx.fillStyle = t.color || "#9ccc65";
-    ctx.beginPath();
-    ctx.moveTo(t.x + bw * 0.28, t.y - bh * 0.95);
-    ctx.lineTo(t.x + bw * 0.52, t.y - bh * 0.82);
-    ctx.lineTo(t.x + bw * 0.28, t.y - bh * 0.7);
-    ctx.closePath();
-    ctx.fill();
-    // 旋转箭台
+  function drawTower(t, s0, alpha) {
+    const s = (s0 || cellSize) * towerScale(t);
+    const mat = TOWER_MAT[Math.max(1, Math.min(3, t.level))];
+    const id = TOWER_ID[t.type];
     ctx.save();
-    ctx.translate(t.x, t.y);
-    ctx.rotate(t.angle);
+    if (alpha != null) ctx.globalAlpha = alpha;
+    drawGroundShadow(t.x, t.y, s * 0.34, s * 0.28);
+    drawStarAura(t, s, id);
+    if (t.type === "arrow") drawArrowTower(t, s, mat, id);
+    else if (t.type === "cannon") drawCannonTower(t, s, mat, id);
+    else drawFrostTower(t, s, mat, id);
+    ctx.restore();
+    if (alpha == null) drawTowerStars(t, s0 || cellSize);
+  }
+
+  /** 箭塔：方形高箭楼 + 绿色尖顶旗；连弩=三联弩臂，狙击=长弩+瞄镜 */
+  function drawArrowTower(t, s, mat, id) {
+    const w = s * 0.42;
+    drawLevelTiers(t, s, w, mat);
+    // 高塔身（梯形）
+    const top = t.y - s * (0.18 + 0.06 * t.level);
     ctx.beginPath();
-    ctx.arc(0, 0, s * 0.12, 0, Math.PI * 2);
-    ctx.fillStyle = "#8a7660";
-    ctx.fill();
-    ctx.strokeStyle = "#3e3428";
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
-    ctx.strokeStyle = "#dcedc8";
-    ctx.lineWidth = 2.4;
-    ctx.shadowColor = "rgba(156,204,101,0.4)";
-    ctx.shadowBlur = 4;
-    ctx.beginPath();
-    ctx.moveTo(s * 0.02, 0);
-    ctx.lineTo(s * 0.32, 0);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = "#ffecb3";
-    ctx.beginPath();
-    ctx.moveTo(s * 0.38, 0);
-    ctx.lineTo(s * 0.28, -s * 0.06);
-    ctx.lineTo(s * 0.28, s * 0.06);
+    ctx.moveTo(t.x - w / 2, t.y + s * 0.1);
+    ctx.lineTo(t.x - w * 0.38, top);
+    ctx.lineTo(t.x + w * 0.38, top);
+    ctx.lineTo(t.x + w / 2, t.y + s * 0.1);
     ctx.closePath();
+    ctx.fillStyle = mat.body;
     ctx.fill();
+    ctx.strokeStyle = mat.line;
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    if (mat.name === "wood") {
+      ctx.strokeStyle = mat.dark; ctx.lineWidth = 1;
+      for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(t.x + i * w * 0.2, top); ctx.lineTo(t.x + i * w * 0.24, t.y + s * 0.1); ctx.stroke(); }
+    } else {
+      ctx.strokeStyle = mat.trim; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(t.x - w * 0.42, (top + t.y) / 2); ctx.lineTo(t.x + w * 0.42, (top + t.y) / 2); ctx.stroke();
+    }
+    // 绿色尖顶
+    ctx.beginPath();
+    ctx.moveTo(t.x - w * 0.5, top);
+    ctx.lineTo(t.x, top - s * (0.14 + 0.03 * t.level));
+    ctx.lineTo(t.x + w * 0.5, top);
+    ctx.closePath();
+    ctx.fillStyle = id.main;
+    ctx.fill();
+    ctx.strokeStyle = mat.line; ctx.lineWidth = 1.2; ctx.stroke();
+    // 旗帜（2★+ 双旗）
+    const flags = (t.star || 1) >= 2 ? [-1, 1] : [1];
+    for (const sd of flags) {
+      const fx = t.x + sd * w * 0.5;
+      ctx.strokeStyle = "#3e2723"; ctx.lineWidth = 1.3;
+      ctx.beginPath(); ctx.moveTo(fx, top); ctx.lineTo(fx, top - s * 0.2); ctx.stroke();
+      ctx.fillStyle = (t.star || 1) >= 3 ? "#ffd54f" : id.light;
+      ctx.beginPath(); ctx.moveTo(fx, top - s * 0.2); ctx.lineTo(fx + sd * s * 0.12, top - s * 0.16); ctx.lineTo(fx, top - s * 0.12); ctx.closePath(); ctx.fill();
+    }
+    // 旋转弩
+    ctx.save();
+    ctx.translate(t.x, t.y - s * 0.02);
+    ctx.rotate(t.angle);
+    const arms = t.branch === "rapid" ? [-0.1, 0, 0.1] : [0];
+    const len = t.branch === "snipe" ? 0.48 : 0.32;
+    for (const oy of arms) {
+      ctx.strokeStyle = mat.name === "metal" ? "#cfd8dc" : "#6d4c41";
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(s * 0.12, oy * s, s * 0.12, -1.2, 1.2); ctx.stroke();
+      ctx.strokeStyle = id.light; ctx.lineWidth = 2.2;
+      ctx.beginPath(); ctx.moveTo(0, oy * s); ctx.lineTo(s * len, oy * s); ctx.stroke();
+      ctx.fillStyle = "#fff8e1";
+      ctx.beginPath(); ctx.moveTo(s * (len + 0.07), oy * s); ctx.lineTo(s * len, oy * s - s * 0.05); ctx.lineTo(s * len, oy * s + s * 0.05); ctx.closePath(); ctx.fill();
+    }
+    if (t.branch === "snipe") {
+      roundRectPath(s * 0.08, -s * 0.1, s * 0.16, s * 0.06, 2);
+      ctx.fillStyle = "#263238"; ctx.fill();
+      ctx.fillStyle = "#ff1744"; ctx.beginPath(); ctx.arc(s * 0.25, -s * 0.07, 2, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.beginPath(); ctx.arc(0, 0, s * 0.08, 0, Math.PI * 2);
+    ctx.fillStyle = mat.trim; ctx.fill(); ctx.strokeStyle = mat.line; ctx.lineWidth = 1; ctx.stroke();
     ctx.restore();
   }
 
-  /** 炮塔：石堡炮台 */
-  function drawCannonTower(t, s) {
-    const bw = s * 0.56;
-    const bh = s * 0.5;
-    roundRectPath(t.x - bw / 2, t.y - bh / 2, bw, bh, 4);
-    ctx.fillStyle = "#5a4a36";
-    ctx.fill();
-    ctx.strokeStyle = "#2e281e";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    drawBattlements(t.x, t.y, bw * 0.9, bh * 0.75, 5);
-    // 铜钉
-    for (const [ox, oy] of [[-0.18, -0.14], [0.18, -0.14], [-0.18, 0.14], [0.18, 0.14]]) {
+  /** 炮塔：矮宽圆形碉堡 + 橙色炮管；Lv↑ 炮管数增加；迫击=粗短臼炮，燃烧=火焰喷口 */
+  function drawCannonTower(t, s, mat, id) {
+    const w = s * 0.6;
+    drawLevelTiers(t, s, w * 0.9, mat);
+    // 八角碉堡
+    polyPath(t.x, t.y - s * 0.02, w * 0.5, 8, Math.PI / 8);
+    ctx.fillStyle = mat.body; ctx.fill();
+    ctx.strokeStyle = mat.line; ctx.lineWidth = 2; ctx.stroke();
+    polyPath(t.x, t.y - s * 0.02, w * 0.36, 8, Math.PI / 8);
+    ctx.fillStyle = mat.dark; ctx.fill();
+    // 铆钉/铁箍
+    const n = 4 + t.level * 2;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
       ctx.beginPath();
-      ctx.arc(t.x + ox * s, t.y + oy * s, 2, 0, Math.PI * 2);
-      ctx.fillStyle = "#d4af55";
-      ctx.fill();
+      ctx.arc(t.x + Math.cos(a) * w * 0.43, t.y - s * 0.02 + Math.sin(a) * w * 0.43, 1.8, 0, Math.PI * 2);
+      ctx.fillStyle = mat.trim; ctx.fill();
     }
     ctx.save();
-    ctx.translate(t.x, t.y);
+    ctx.translate(t.x, t.y - s * 0.02);
     ctx.rotate(t.angle);
-    roundRectPath(s * 0.02, -s * 0.09, s * 0.3, s * 0.18, 2);
-    ctx.fillStyle = "#4e4030";
-    ctx.fill();
-    ctx.strokeStyle = "#2a2218";
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(s * 0.32, 0, s * 0.1, 0, Math.PI * 2);
-    ctx.fillStyle = t.color || "#e8985a";
-    ctx.shadowColor = "rgba(232,152,90,0.5)";
-    ctx.shadowBlur = 5;
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.beginPath();
-    ctx.arc(s * 0.32, 0, s * 0.055, 0, Math.PI * 2);
-    ctx.fillStyle = "#1a120c";
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(0, 0, s * 0.1, 0, Math.PI * 2);
-    ctx.fillStyle = "#8a7660";
-    ctx.fill();
+    const barrels = t.branch === "mortar" ? 1 : Math.min(3, t.level);
+    const bw = t.branch === "mortar" ? 0.26 : 0.12;
+    const bl = t.branch === "mortar" ? 0.26 : 0.34 + 0.04 * t.level;
+    for (let i = 0; i < barrels; i++) {
+      const oy = (i - (barrels - 1) / 2) * s * 0.13;
+      roundRectPath(0, oy - s * bw / 2, s * bl, s * bw, 2);
+      ctx.fillStyle = mat.name === "metal" ? "#37474f" : "#3e2f22"; ctx.fill();
+      ctx.strokeStyle = "#111"; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = id.main;
+      ctx.fillRect(s * (bl - 0.05), oy - s * bw / 2 - 1, s * 0.05, s * bw + 2);
+      if (t.branch === "burn") {
+        const fl = 0.08 + 0.04 * Math.sin(performance.now() / 70 + i);
+        ctx.fillStyle = "#ffca28";
+        ctx.beginPath(); ctx.moveTo(s * bl, oy - s * 0.05); ctx.lineTo(s * (bl + fl + 0.06), oy); ctx.lineTo(s * bl, oy + s * 0.05); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = "#ff3d00";
+        ctx.beginPath(); ctx.moveTo(s * bl, oy - s * 0.03); ctx.lineTo(s * (bl + fl), oy); ctx.lineTo(s * bl, oy + s * 0.03); ctx.closePath(); ctx.fill();
+      }
+    }
+    ctx.beginPath(); ctx.arc(0, 0, s * 0.13, 0, Math.PI * 2);
+    ctx.fillStyle = id.main; ctx.fill();
+    ctx.strokeStyle = mat.line; ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, s * 0.06, 0, Math.PI * 2);
+    ctx.fillStyle = mat.trim; ctx.fill();
     ctx.restore();
   }
 
-  /** 霜塔：符文石塔 */
-  function drawFrostTower(t, s) {
-    ctx.beginPath();
-    ctx.arc(t.x, t.y, s * 0.38, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(129,212,250,0.1)";
-    ctx.fill();
-    // 石六角底座
-    ctx.beginPath();
+  /** 霜塔：六角符文台 + 悬浮冰晶；Lv↑ 晶簇数增加；冰封=冰块立方，碎冰=尖刺放射 */
+  function drawFrostTower(t, s, mat, id) {
+    const now = performance.now() / 1000;
+    drawLevelTiers(t, s, s * 0.4, mat);
+    polyPath(t.x, t.y, s * 0.3, 6, -Math.PI / 6);
+    ctx.fillStyle = mat.body; ctx.fill();
+    ctx.strokeStyle = id.main; ctx.lineWidth = 2;
+    ctx.shadowColor = id.glow + "0.7)"; ctx.shadowBlur = 6; ctx.stroke(); ctx.shadowBlur = 0;
+    // 符文点
     for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2 - Math.PI / 6;
-      const px = t.x + Math.cos(a) * s * 0.26;
-      const py = t.y + Math.sin(a) * s * 0.26;
-      if (i === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
+      const a = (i / 6) * Math.PI * 2;
+      ctx.fillStyle = id.light;
+      ctx.beginPath(); ctx.arc(t.x + Math.cos(a) * s * 0.22, t.y + Math.sin(a) * s * 0.22, 1.5, 0, Math.PI * 2); ctx.fill();
     }
-    ctx.closePath();
-    ctx.fillStyle = "#5a5348";
-    ctx.fill();
-    ctx.strokeStyle = "#81d4fa";
-    ctx.lineWidth = 1.5;
-    ctx.shadowColor = "rgba(129,212,250,0.4)";
-    ctx.shadowBlur = 5;
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    // 冰晶
+    const bob = Math.sin(now * 2.2 + t.c) * s * 0.03;
+    // 侧晶簇（等级越高越多）
+    const side = t.level - 1;
+    for (let i = 0; i < side * 2; i++) {
+      const a = now * 0.8 + (i / (side * 2)) * Math.PI * 2;
+      const px = t.x + Math.cos(a) * s * 0.2, py = t.y - s * 0.06 + Math.sin(a) * s * 0.1;
+      ctx.beginPath(); ctx.moveTo(px, py - s * 0.09); ctx.lineTo(px + s * 0.035, py); ctx.lineTo(px, py + s * 0.04); ctx.lineTo(px - s * 0.035, py); ctx.closePath();
+      ctx.fillStyle = id.light; ctx.fill();
+    }
     ctx.save();
-    ctx.translate(t.x, t.y);
-    ctx.beginPath();
-    ctx.moveTo(0, -s * 0.26);
-    ctx.lineTo(s * 0.1, -s * 0.02);
-    ctx.lineTo(s * 0.05, s * 0.14);
-    ctx.lineTo(-s * 0.05, s * 0.14);
-    ctx.lineTo(-s * 0.1, -s * 0.02);
-    ctx.closePath();
-    ctx.fillStyle = t.color || "#81d4fa";
-    ctx.globalAlpha = 0.88;
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = "#e1f5fe";
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
+    ctx.translate(t.x, t.y - s * 0.08 + bob);
+    if (t.branch === "freeze") {
+      roundRectPath(-s * 0.13, -s * 0.13, s * 0.26, s * 0.26, 3);
+      ctx.fillStyle = "rgba(179,229,252,0.85)"; ctx.fill();
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.strokeStyle = "rgba(255,255,255,0.7)"; ctx.beginPath(); ctx.moveTo(-s * 0.08, -s * 0.08); ctx.lineTo(s * 0.02, -s * 0.02); ctx.stroke();
+    } else {
+      const h = s * (0.2 + 0.04 * t.level);
+      ctx.beginPath(); ctx.moveTo(0, -h); ctx.lineTo(s * 0.1, 0); ctx.lineTo(0, s * 0.12); ctx.lineTo(-s * 0.1, 0); ctx.closePath();
+      ctx.fillStyle = mat.name === "metal" ? "#4fc3f7" : id.main; ctx.globalAlpha *= 0.92; ctx.fill(); ctx.globalAlpha = Math.min(1, ctx.globalAlpha / 0.92);
+      ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.2; ctx.stroke();
+      if (t.branch === "shatter") {
+        ctx.strokeStyle = "#e1f5fe"; ctx.lineWidth = 2;
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2 + now;
+          ctx.beginPath(); ctx.moveTo(Math.cos(a) * s * 0.12, Math.sin(a) * s * 0.12); ctx.lineTo(Math.cos(a) * s * 0.24, Math.sin(a) * s * 0.24); ctx.stroke();
+        }
+      }
+    }
     ctx.rotate(t.angle);
-    ctx.beginPath();
-    ctx.moveTo(s * 0.08, 0);
-    ctx.lineTo(s * 0.28, -s * 0.05);
-    ctx.lineTo(s * 0.28, s * 0.05);
-    ctx.closePath();
-    ctx.fillStyle = t.colorLight || "#e1f5fe";
-    ctx.fill();
+    ctx.fillStyle = id.light;
+    ctx.beginPath(); ctx.moveTo(s * 0.12, 0); ctx.lineTo(s * 0.3, -s * 0.04); ctx.lineTo(s * 0.3, s * 0.04); ctx.closePath(); ctx.fill();
     ctx.restore();
   }
 
