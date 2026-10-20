@@ -13,6 +13,24 @@
   const WAVES_PER_LEVEL = 30;
   const START_GOLD_BASE = 120;
   const SELL_RATIO = 0.6;
+  /** 3★ 专精分支 */
+  const BRANCH_DEFS = {
+    arrow: {
+      rapid: { id: "rapid", name: "连弩", desc: "射速×1.6 · 同时3目标 · 单发×0.7" },
+      snipe: { id: "snipe", name: "狙击", desc: "射程+2 · 伤×2.2 · 射速×0.6 · 无视盾减" },
+    },
+    cannon: {
+      mortar: { id: "mortar", name: "迫击", desc: "射程+1.5 · 溅射×1.5 · 射速×0.8" },
+      burn: { id: "burn", name: "燃烧", desc: "落点火 2s · 每秒 25% 炮弹伤" },
+    },
+    frost: {
+      freeze: { id: "freeze", name: "冰封", desc: "12% 冻结 1s（Boss 0.4s）" },
+      shatter: { id: "shatter", name: "碎冰", desc: "减速中目标全伤害 +25%" },
+    },
+  };
+  const SKILL_METEOR_CD = 60;
+  const SKILL_REINFORCE_CD = 45;
+  const MERGE_MIN_LEVEL = 2; // 合成要求 Lv≥2，缓和 3★ 节奏
   const BASE_HP = 40;
   const BASE_SPEED = 1.0; // 格/秒
   const BASE_REWARD = 8;
@@ -451,6 +469,7 @@
       let speedMul = g.speedMul * diff.speed * stageSpd;
       let count = Math.max(1, Math.round(g.count * countMul));
       let reward = g.reward != null ? Math.max(1, Math.round(g.reward * diff.reward)) : undefined;
+      if (stage >= 4) hpMul *= 1.15; // 3★ 合成对冲
       if (g.kind === "boss") {
         hpMul *= 1 + 0.08 * (stage - 1);
         if (milestoneBoss) hpMul *= 1.35;
@@ -514,6 +533,14 @@
   const btnPauseMenu = document.getElementById("btn-pause-menu");
   const btnHudMenu = document.getElementById("btn-hud-menu");
   const startMapBtns = document.getElementById("start-map-btns");
+  const btnMerge = document.getElementById("btn-merge");
+  const btnSkillMeteor = document.getElementById("btn-skill-meteor");
+  const btnSkillReinforce = document.getElementById("btn-skill-reinforce");
+  const branchOverlay = document.getElementById("branch-overlay");
+  const branchTitle = document.getElementById("branch-title");
+  const branchOptions = document.getElementById("branch-options");
+  const skillMeteorCd = document.getElementById("skill-meteor-cd");
+  const skillReinforceCd = document.getElementById("skill-reinforce-cd");
 
   // ---------- 状态 ----------
   let cellSize = 50;
@@ -548,6 +575,14 @@
     waveWallStart: null,
     sessionKills: 0,
     paused: false,
+    mergeMode: false,
+    mergePicks: [],
+    skillAim: null, // null | "meteor"
+    fires: [],
+    allies: [],
+    skillCd: { meteor: 0, reinforce: 0 },
+    skillHintShown: false,
+    pendingBranchTower: null,
   };
 
   /** 模拟时钟（秒），随倍速推进；慢速/闪白/弹道寿命用它，避免墙钟与倍速错位 */
@@ -752,40 +787,101 @@
   }
 
   // ---------- 升级计算 ----------
-  function towerStats(type, level) {
+  function levelInvested(type, level) {
+    const d = TOWER_DEFS[type];
+    let inv = d.cost;
+    if (level >= 2) inv += Math.round(d.cost * 0.8);
+    if (level >= 3) inv += Math.round(d.cost * 1.2);
+    return inv;
+  }
+
+  function towerStats(type, level, star = 1, branch = null) {
     const d = TOWER_DEFS[type];
     let range = d.range;
     let rate = d.rate;
     let damage = d.damage;
     let slow = d.slow || 0;
-    let invested = d.cost;
+    let splash = d.splash || 0;
+    let splashRatio = d.splashRatio || 0;
 
+    // 星内 Lv1–3
     if (level >= 2) {
-      invested += Math.round(d.cost * 0.8);
       damage *= 1.4;
       rate *= 1.15;
       if (type === "frost") slow = Math.min(0.5, slow + 0.05);
     }
     if (level >= 3) {
-      invested += Math.round(d.cost * 1.2);
       damage *= 1.35;
       range += 0.4;
       if (type === "frost") slow = Math.min(0.5, slow + 0.05);
     }
+
+    // 星级（相对星内基础的绝对乘子）
+    const st = Math.max(1, Math.min(3, star | 0));
+    if (st === 2) {
+      damage *= 1.8;
+      rate *= 1.1;
+    } else if (st >= 3) {
+      damage *= 3.2;
+      rate *= 1.2;
+      range += 0.3;
+    }
+
+    let multiTarget = 1;
+    let ignoreShieldArrow = false;
+    let burnGround = false;
+    let freezeChance = 0;
+    let shatterBonus = false;
+    let branchName = "";
+
+    if (st >= 3 && branch) {
+      if (type === "arrow" && branch === "rapid") {
+        rate *= 1.6;
+        multiTarget = 3;
+        damage *= 0.7;
+        branchName = "连弩";
+      } else if (type === "arrow" && branch === "snipe") {
+        range += 2;
+        damage *= 2.2;
+        rate *= 0.6;
+        ignoreShieldArrow = true;
+        branchName = "狙击";
+      } else if (type === "cannon" && branch === "mortar") {
+        range += 1.5;
+        splash *= 1.5;
+        rate *= 0.8;
+        branchName = "迫击";
+      } else if (type === "cannon" && branch === "burn") {
+        burnGround = true;
+        branchName = "燃烧";
+      } else if (type === "frost" && branch === "freeze") {
+        freezeChance = 0.12;
+        branchName = "冰封";
+      } else if (type === "frost" && branch === "shatter") {
+        shatterBonus = true;
+        branchName = "碎冰";
+      }
+    }
+
     return {
       range,
       rate,
       damage: Math.round(damage * 10) / 10,
       slow,
       slowDur: d.slowDur || 0,
-      splash: d.splash || 0,
-      splashRatio: d.splashRatio || 0,
-      invested,
+      splash,
+      splashRatio,
       color: d.color,
       colorDark: d.colorDark,
       colorLight: d.colorLight,
       name: d.name,
       projectile: d.projectile,
+      multiTarget,
+      ignoreShieldArrow,
+      burnGround,
+      freezeChance,
+      shatterBonus,
+      branchName,
     };
   }
 
@@ -796,13 +892,26 @@
     return 0;
   }
 
+  function branchLabel(type, branch) {
+    const pack = BRANCH_DEFS[type];
+    if (!pack || !branch || !pack[branch]) return "";
+    return pack[branch].name;
+  }
+
+  function hasShatterAura() {
+    return state.towers.some((t) => t.shatterBonus);
+  }
+
   // ---------- 实体 ----------
   class Tower {
-    constructor(type, c, r) {
+    constructor(type, c, r, opts = {}) {
       this.type = type;
       this.c = c;
       this.r = r;
-      this.level = 1;
+      this.level = opts.level != null ? opts.level : 1;
+      this.star = opts.star != null ? opts.star : 1;
+      this.branch = opts.branch || null;
+      this.invested = opts.invested != null ? opts.invested : TOWER_DEFS[type].cost;
       const p = cellCenter(c, r);
       this.x = p.x;
       this.y = p.y;
@@ -812,7 +921,9 @@
       this.refresh();
     }
     refresh() {
-      Object.assign(this, towerStats(this.type, this.level));
+      const stats = towerStats(this.type, this.level, this.star, this.branch);
+      Object.assign(this, stats);
+      // invested 由建造/升级/合成维护，不被 stats 覆盖
     }
     upgrade() {
       if (this.level >= 3) return false;
@@ -820,12 +931,18 @@
       if (state.gold < cost) return false;
       state.gold -= cost;
       state.spent += cost;
+      this.invested += cost;
       this.level++;
       this.refresh();
       return true;
     }
     sellValue() {
       return Math.floor(this.invested * SELL_RATIO);
+    }
+    displayName() {
+      const stars = "★".repeat(this.star) + "☆".repeat(3 - this.star);
+      const br = this.branchName ? ` · ${this.branchName}` : "";
+      return `${this.name} ${stars} Lv.${this.level}${br}`;
     }
   }
 
@@ -845,6 +962,9 @@
       this.progress = 0;
       this.slowMul = 1;
       this.slowUntil = 0;
+      this.freezeUntil = 0;
+      this.freezeIcdUntil = 0;
+      this.blockedBy = null;
       this.dead = false;
       this.escaped = false;
       this.hitFlash = 0;
@@ -900,6 +1020,7 @@
       this.angle = p.angle;
     }
     speed(now) {
+      if (now < this.freezeUntil) return 0;
       const slow = now < this.slowUntil ? this.slowMul : 1;
       return this.baseSpeed * slow;
     }
@@ -912,10 +1033,20 @@
         this.slowUntil = Math.max(this.slowUntil, now + dur * 0.5);
       }
     }
-    /** 盾兵：箭伤×0.6，炮溅射×1.2；其余直伤 */
-    mitigate(amount, style, isSplash) {
+    tryFreeze(now, isBoss) {
+      if (now < this.freezeIcdUntil) return false;
+      const dur = isBoss ? 0.4 : 1.0;
+      this.freezeUntil = now + dur;
+      this.freezeIcdUntil = now + 3;
+      return true;
+    }
+    /** 盾兵：箭伤×0.6，炮溅射×1.2；狙击无视箭减伤 */
+    mitigate(amount, style, isSplash, ignoreShieldArrow) {
       if (this.kind !== "shield") return amount;
-      if (style === "arrow") return amount * 0.6;
+      if (style === "arrow") {
+        if (ignoreShieldArrow) return amount;
+        return amount * 0.6;
+      }
       if (style === "cannon" && isSplash) return amount * 1.2;
       return amount;
     }
@@ -934,7 +1065,10 @@
       this.slow = tower.slow;
       this.slowDur = tower.slowDur;
       this.style = tower.projectile;
-      this.speed = cellSize * (this.style === "cannon" ? 6 : 10);
+      this.ignoreShieldArrow = !!tower.ignoreShieldArrow;
+      this.burnGround = !!tower.burnGround;
+      this.freezeChance = tower.freezeChance || 0;
+      this.speed = cellSize * (this.style === "cannon" ? 6 : this.style === "arrow" && tower.branch === "snipe" ? 14 : 10);
       this.alive = true;
       this.born = now;
       const ang = Math.atan2(this.ty - this.y, this.tx - this.x);
@@ -1063,8 +1197,15 @@
     state.particles = [];
     state.explosions = [];
     state.spawnQueue = [];
+    state.fires = [];
+    state.allies = [];
     state.selected = null;
     state.buildType = null;
+    state.mergeMode = false;
+    state.mergePicks = [];
+    state.skillAim = null;
+    state.pendingBranchTower = null;
+    if (branchOverlay) branchOverlay.classList.add("hidden");
     selectPanel.classList.add("hidden");
     buildPanel.classList.remove("hidden");
   }
@@ -1173,7 +1314,16 @@
       speed: 1,
       waveWallStart: null,
       paused: false,
+      mergeMode: false,
+      mergePicks: [],
+      skillAim: null,
+      fires: [],
+      allies: [],
+      skillCd: { meteor: 0, reinforce: 0 },
+      skillHintShown: false,
+      pendingBranchTower: null,
     });
+    if (branchOverlay) branchOverlay.classList.add("hidden");
     if (pauseOverlay) pauseOverlay.classList.add("hidden");
     if (btnPause) {
       btnPause.setAttribute("aria-pressed", "false");
@@ -1216,6 +1366,12 @@
         btnPause.setAttribute("aria-pressed", "false");
         btnPause.textContent = "暂停";
       }
+      return;
+    }
+    // 专精选择中不允许用暂停层盖掉
+    if (state.pendingBranchTower) {
+      state.paused = true;
+      if (pauseOverlay) pauseOverlay.classList.add("hidden");
       return;
     }
     state.paused = !!on;
@@ -1315,6 +1471,7 @@
       const s = Number(b.dataset.speed);
       b.classList.toggle("active", s === state.speed);
     });
+    updateSkillButtons();
   }
 
   function setGameSpeed(mult) {
@@ -1333,21 +1490,289 @@
     });
   }
 
+
+  // ---------- 合成 / 专精 / 技能 ----------
+  function cancelMergeMode() {
+    state.mergeMode = false;
+    state.mergePicks = [];
+    if (btnMerge) btnMerge.classList.remove("active");
+  }
+
+  function cancelSkillAim() {
+    state.skillAim = null;
+    if (btnSkillMeteor) btnSkillMeteor.classList.remove("aiming");
+  }
+
+  function canMergeCandidate(anchor, t) {
+    if (!anchor || !t || t === anchor) return false;
+    if (t.type !== anchor.type) return false;
+    if (t.star !== anchor.star) return false;
+    if (anchor.star >= 3) return false;
+    if (t.level < MERGE_MIN_LEVEL || anchor.level < MERGE_MIN_LEVEL) return false;
+    return true;
+  }
+
+  function countMergePartners(anchor) {
+    if (!anchor || anchor.star >= 3 || anchor.level < MERGE_MIN_LEVEL) return 0;
+    return state.towers.filter((t) => canMergeCandidate(anchor, t)).length;
+  }
+
+  function enterMergeMode() {
+    const a = state.selected;
+    if (!a) return;
+    if (a.star >= 3) {
+      toast("已满 3 星");
+      return;
+    }
+    if (a.level < MERGE_MIN_LEVEL) {
+      toast(`合成需自身 Lv≥${MERGE_MIN_LEVEL}`);
+      return;
+    }
+    if (countMergePartners(a) < 2) {
+      toast(`需要另外 2 座同种同星且 Lv≥${MERGE_MIN_LEVEL} 的塔`);
+      return;
+    }
+    state.mergeMode = true;
+    state.mergePicks = [];
+    state.buildType = null;
+    state.skillAim = null;
+    if (btnMerge) btnMerge.classList.add("active");
+    toast("合成：再点选 2 座同种同星塔（可跨格）", 2200);
+    refreshSelectPanel();
+  }
+
+  function performMerge(anchor, picks) {
+    const all = [anchor, ...picks];
+    const invested = all.reduce((s, t) => s + t.invested, 0);
+    const c = anchor.c;
+    const r = anchor.r;
+    const type = anchor.type;
+    const newStar = Math.min(3, anchor.star + 1);
+    const removeSet = new Set(all);
+    state.towers = state.towers.filter((t) => !removeSet.has(t));
+    const merged = new Tower(type, c, r, {
+      star: newStar,
+      level: 1,
+      invested,
+      branch: null,
+    });
+    state.towers.push(merged);
+    spawnParticle(merged.x, merged.y, merged.color, 16);
+    sfx("upgrade");
+    cancelMergeMode();
+    selectTower(merged);
+    toast(`合成成功：${merged.name} ${"★".repeat(newStar)}`, 2000);
+    if (newStar >= 3 && !merged.branch) {
+      openBranchPicker(merged);
+    }
+    updateHUD();
+  }
+
+  function tryPickMergeTower(t) {
+    const anchor = state.selected;
+    if (!state.mergeMode || !anchor) return false;
+    if (t === anchor) {
+      toast("请点另外两座材料塔");
+      return true;
+    }
+    if (!canMergeCandidate(anchor, t)) {
+      toast(`需同种同星且 Lv≥${MERGE_MIN_LEVEL}`);
+      return true;
+    }
+    if (state.mergePicks.includes(t)) {
+      state.mergePicks = state.mergePicks.filter((x) => x !== t);
+      toast(`已取消材料（${state.mergePicks.length}/2）`);
+      refreshSelectPanel();
+      return true;
+    }
+    state.mergePicks.push(t);
+    if (state.mergePicks.length >= 2) {
+      performMerge(anchor, state.mergePicks.slice(0, 2));
+    } else {
+      toast(`已选材料 ${state.mergePicks.length}/2`, 1200);
+      refreshSelectPanel();
+    }
+    return true;
+  }
+
+  function openBranchPicker(tower) {
+    if (!branchOverlay || !tower || tower.star < 3) return;
+    state.pendingBranchTower = tower;
+    state.paused = true; // soft pause while choosing
+    if (pauseOverlay) pauseOverlay.classList.add("hidden");
+    const pack = BRANCH_DEFS[tower.type];
+    if (branchTitle) branchTitle.textContent = `${tower.name} 3★ 专精`;
+    if (branchOptions) {
+      branchOptions.innerHTML = "";
+      Object.values(pack).forEach((b) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "action-btn primary branch-opt";
+        btn.innerHTML = `<strong>${b.name}</strong><span>${b.desc}</span>`;
+        btn.addEventListener("click", () => {
+          chooseBranch(b.id);
+        });
+        branchOptions.appendChild(btn);
+      });
+    }
+    branchOverlay.classList.remove("hidden");
+  }
+
+  function chooseBranch(branchId) {
+    const t = state.pendingBranchTower;
+    if (!t) return;
+    t.branch = branchId;
+    t.refresh();
+    state.pendingBranchTower = null;
+    if (branchOverlay) branchOverlay.classList.add("hidden");
+    state.paused = false;
+    if (btnPause) {
+      btnPause.setAttribute("aria-pressed", "false");
+      btnPause.textContent = "暂停";
+    }
+    toast(`专精：${branchLabel(t.type, branchId)}`, 2000);
+    sfx("upgrade");
+    if (state.selected === t) refreshSelectPanel();
+    updateHUD();
+  }
+
+  function skillPowerMul() {
+    const stage = state.stage || 1;
+    return {
+      meteor: 120 * (1 + 0.25 * (stage - 1)),
+      allyHp: 200 * (1 + 0.2 * (stage - 1)),
+    };
+  }
+
+  function updateSkillButtons() {
+    const mCd = Math.max(0, state.skillCd.meteor);
+    const rCd = Math.max(0, state.skillCd.reinforce);
+    if (btnSkillMeteor) {
+      btnSkillMeteor.disabled = state.ended || state.phase === "menu" || (mCd > 0 && !state.skillAim);
+      if (skillMeteorCd) {
+        skillMeteorCd.textContent = state.skillAim === "meteor" ? "点地" : (mCd > 0 ? `${Math.ceil(mCd)}s` : "就绪");
+      }
+      btnSkillMeteor.classList.toggle("ready", mCd <= 0 && !state.ended && state.phase !== "menu");
+      btnSkillMeteor.classList.toggle("aiming", state.skillAim === "meteor");
+    }
+    if (btnSkillReinforce) {
+      btnSkillReinforce.disabled = state.ended || state.phase === "menu" || rCd > 0 || !!state.skillAim;
+      if (skillReinforceCd) {
+        skillReinforceCd.textContent = rCd > 0 ? `${Math.ceil(rCd)}s` : "就绪";
+      }
+      btnSkillReinforce.classList.toggle("ready", rCd <= 0 && !state.ended && state.phase !== "menu");
+    }
+  }
+
+  function castMeteorAt(x, y) {
+    const pow = skillPowerMul().meteor;
+    const radius = 2 * cellSize;
+    let hits = 0;
+    for (const e of state.enemies) {
+      if (e.dead || e.escaped) continue;
+      if (dist(x, y, e.x, e.y) <= radius + e.radius * cellSize) {
+        let dmg = pow;
+        if (e.kind === "boss") dmg *= 0.5;
+        damageEnemy(e, dmg, gameNow, "cannon", true);
+        hits++;
+      }
+    }
+    state.explosions.push({
+      x, y, r: 4, maxR: radius, life: 0.45, maxLife: 0.45, shards: 10, tint: "#ff7043",
+    });
+    spawnParticle(x, y, "#ff7043", 18);
+    sfx("boom");
+    state.skillCd.meteor = SKILL_METEOR_CD;
+    cancelSkillAim();
+    toast(hits ? `流星火雨 · 命中 ${hits}` : "流星火雨 · 空放", 1600);
+    if (!state.skillHintShown) {
+      state.skillHintShown = true;
+      toast("技能开局即就绪，点按钮后点地图释放火雨", 2400);
+    }
+    updateSkillButtons();
+    updateHUD();
+  }
+
+  function beginMeteorAim() {
+    if (state.ended || state.phase === "menu" || state.paused) return;
+    if (state.skillAim === "meteor") {
+      cancelSkillAim();
+      toast("已取消火雨瞄准");
+      updateSkillButtons();
+      return;
+    }
+    if (state.skillCd.meteor > 0) {
+      toast(`火雨冷却 ${Math.ceil(state.skillCd.meteor)}s`);
+      return;
+    }
+    cancelMergeMode();
+    state.buildType = null;
+    state.skillAim = "meteor";
+    toast("点地图落点释放流星火雨", 1800);
+    if (!state.skillHintShown) {
+      state.skillHintShown = true;
+    }
+    updateBuildButtons();
+    updateSkillButtons();
+  }
+
+  function castReinforce() {
+    if (state.ended || state.phase === "menu" || state.paused) return;
+    if (state.skillCd.reinforce > 0) {
+      toast(`援军冷却 ${Math.ceil(state.skillCd.reinforce)}s`);
+      return;
+    }
+    if (!pathLen) return;
+    const hp = skillPowerMul().allyHp;
+    const slots = [0.35, 0.5, 0.65];
+    for (const frac of slots) {
+      const prog = pathLen * frac;
+      const p = posOnPath(prog);
+      state.allies.push({
+        x: p.x,
+        y: p.y,
+        progress: prog,
+        hp,
+        maxHp: hp,
+        until: gameNow + 8,
+        radius: 0.28,
+      });
+      spawnParticle(p.x, p.y, "#ffd54f", 8);
+    }
+    state.skillCd.reinforce = SKILL_REINFORCE_CD;
+    sfx("build");
+    toast("援军就位 · 拦路 8 秒", 1600);
+    if (!state.skillHintShown) {
+      state.skillHintShown = true;
+      toast("技能开局即就绪：火雨点地，援军一键召唤", 2400);
+    }
+    updateSkillButtons();
+  }
+
   function refreshSelectPanel() {
     const t = state.selected;
     if (!t) return;
-    selTitle.textContent = `${t.name}  Lv.${t.level}`;
+    selTitle.textContent = t.displayName();
     const slowTxt = t.slow
       ? `<br>减速 ${Math.round(t.slow * 100)}% × ${t.slowDur}s`
       : "";
     const splashTxt = t.splash
       ? `<br>溅射 ${t.splash.toFixed(1)} 格（${Math.round(t.splashRatio * 100)}%）`
       : "";
+    const multiTxt = t.multiTarget > 1 ? `<br>多目标 ×${t.multiTarget}` : "";
+    const flagTxt = [
+      t.ignoreShieldArrow ? "无视盾减" : "",
+      t.burnGround ? "落火" : "",
+      t.freezeChance ? `冰封 ${Math.round(t.freezeChance * 100)}%` : "",
+      t.shatterBonus ? "碎冰光环" : "",
+    ].filter(Boolean).join(" · ");
     selStats.innerHTML =
       `伤害 ${t.damage} · 射速 ${t.rate.toFixed(2)}/s<br>` +
       `射程 ${t.range.toFixed(1)} 格` +
       splashTxt +
       slowTxt +
+      multiTxt +
+      (flagTxt ? `<br>${flagTxt}` : "") +
       `<br>投入 ${t.invested} · 卖出 ${t.sellValue()}`;
 
     if (t.level >= 3) {
@@ -1355,16 +1780,34 @@
       btnUpgrade.textContent = "已满级";
     } else {
       const cost = upgradeCost(t.type, t.level);
-      btnUpgrade.disabled = state.gold < cost || state.ended;
+      btnUpgrade.disabled = state.gold < cost || state.ended || state.mergeMode;
       btnUpgrade.textContent = `升级 Lv.${t.level + 1}（${cost}）`;
     }
-    btnSell.disabled = state.ended;
+    btnSell.disabled = state.ended || state.mergeMode;
     btnSell.textContent = `卖掉 +${t.sellValue()}`;
+    if (btnMerge) {
+      const partners = countMergePartners(t);
+      const can = t.star < 3 && t.level >= MERGE_MIN_LEVEL && partners >= 2 && !state.ended;
+      btnMerge.disabled = !can && !state.mergeMode;
+      if (state.mergeMode) {
+        btnMerge.textContent = `合成中 ${state.mergePicks.length}/2 · 取消`;
+        btnMerge.classList.add("active");
+      } else {
+        btnMerge.classList.remove("active");
+        btnMerge.textContent = t.star >= 3
+          ? "已满星"
+          : `合成 ★${t.star + 1}（需2座 Lv≥${MERGE_MIN_LEVEL}）`;
+      }
+    }
   }
 
   function selectTower(t) {
+    if (state.mergeMode && state.selected && t !== state.selected) {
+      if (tryPickMergeTower(t)) return;
+    }
     state.selected = t;
     state.buildType = null;
+    if (!state.mergeMode) cancelMergeMode();
     buildPanel.classList.add("hidden");
     selectPanel.classList.remove("hidden");
     refreshSelectPanel();
@@ -1372,6 +1815,8 @@
   }
 
   function deselect() {
+    cancelMergeMode();
+    cancelSkillAim();
     state.selected = null;
     selectPanel.classList.add("hidden");
     buildPanel.classList.remove("hidden");
@@ -1392,11 +1837,26 @@
   function onPointerDown(e) {
     if (state.ended || state.paused) return;
     e.preventDefault();
-    const { c, r } = pointerToCell(e);
+    const { c, r, x, y } = pointerToCell(e);
+
+    if (state.skillAim === "meteor") {
+      castMeteorAt(x, y);
+      return;
+    }
+
     const existing = towerAt(c, r);
     if (existing) {
+      if (state.mergeMode) {
+        tryPickMergeTower(existing);
+        sfx("click");
+        return;
+      }
       selectTower(existing);
       sfx("click");
+      return;
+    }
+    if (state.mergeMode) {
+      toast("请点选另外两座同种同星塔");
       return;
     }
     if (state.buildType) {
@@ -1488,6 +1948,34 @@
   });
 
   btnDeselect.addEventListener("click", deselect);
+
+  if (btnMerge) {
+    btnMerge.addEventListener("click", () => {
+      sfx("click");
+      if (state.ended) return;
+      if (state.paused && !state.pendingBranchTower) return;
+      if (state.mergeMode) {
+        cancelMergeMode();
+        refreshSelectPanel();
+        toast("已取消合成");
+        return;
+      }
+      enterMergeMode();
+    });
+  }
+  if (btnSkillMeteor) {
+    btnSkillMeteor.addEventListener("click", () => {
+      sfx("click");
+      beginMeteorAim();
+      updateSkillButtons();
+    });
+  }
+  if (btnSkillReinforce) {
+    btnSkillReinforce.addEventListener("click", () => {
+      sfx("click");
+      castReinforce();
+    });
+  }
 
   btnNextWave.addEventListener("click", () => {
     if (state.ended || state.paused) return;
@@ -1586,22 +2074,21 @@
   syncSpeedButtons();
 
   // ---------- 战斗逻辑 ----------
-  function findTarget(tower) {
+  function findTargets(tower, n = 1) {
     const rangePx = tower.range * cellSize;
-    let best = null;
-    let bestScore = -Infinity;
+    const scored = [];
     for (const e of state.enemies) {
       if (e.dead || e.escaped) continue;
       if (dist(tower.x, tower.y, e.x, e.y) <= rangePx + e.radius * cellSize) {
-        // 飞影高优先；同优先取路径最前
-        const score = e.priority * 1e6 + e.progress;
-        if (score > bestScore) {
-          bestScore = score;
-          best = e;
-        }
+        scored.push({ e, score: e.priority * 1e6 + e.progress });
       }
     }
-    return best;
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, Math.max(1, n)).map((x) => x.e);
+  }
+
+  function findTarget(tower) {
+    return findTargets(tower, 1)[0] || null;
   }
 
   function spawnSplitlings(parent) {
@@ -1618,9 +2105,13 @@
     }
   }
 
-    function damageEnemy(e, amount, now, style, isSplash) {
+  function damageEnemy(e, amount, now, style, isSplash, opts = {}) {
     if (e.dead) return;
-    const dmg = e.mitigate(amount, style, !!isSplash);
+    let raw = amount;
+    if (hasShatterAura() && now < e.slowUntil && e.slowMul < 1) {
+      raw *= 1.25;
+    }
+    const dmg = e.mitigate(raw, style, !!isSplash, !!opts.ignoreShieldArrow);
     e.hp -= dmg;
     e.hitFlash = now + 0.1;
     if (e.hp <= 0) {
@@ -1642,6 +2133,7 @@
   function hitProjectile(p, now) {
     p.alive = false;
     const target = p.target;
+    const opts = { ignoreShieldArrow: !!p.ignoreShieldArrow };
     if (p.splash > 0) {
       sfx("boom");
       for (const e of state.enemies) {
@@ -1650,7 +2142,7 @@
         if (d <= p.splash + e.radius * cellSize) {
           const isPrimary = e === target;
           const dmg = isPrimary ? p.damage : p.damage * p.splashRatio;
-          damageEnemy(e, dmg, now, p.style, !isPrimary);
+          damageEnemy(e, dmg, now, p.style, !isPrimary, opts);
         }
       }
       spawnParticle(p.tx, p.ty, "#ffab91", 10);
@@ -1658,10 +2150,23 @@
         x: p.tx, y: p.ty, r: 4, maxR: p.splash,
         life: 0.32, maxLife: 0.32, shards: 6,
       });
+      if (p.burnGround) {
+        state.fires.push({
+          x: p.tx, y: p.ty,
+          r: Math.max(cellSize * 0.7, p.splash * 0.85),
+          dps: p.damage * 0.25,
+          until: now + 2,
+        });
+      }
     } else {
       if (target && !target.dead && !target.escaped) {
-        damageEnemy(target, p.damage, now, p.style, false);
+        damageEnemy(target, p.damage, now, p.style, false, opts);
         if (p.slow > 0) target.applySlow(p.slow, p.slowDur, now);
+        if (p.freezeChance > 0 && Math.random() < p.freezeChance) {
+          if (target.tryFreeze(now, target.kind === "boss")) {
+            spawnParticle(target.x, target.y, "#e1f5fe", 6);
+          }
+        }
       }
       spawnParticle(p.tx, p.ty, p.color, 4);
     }
@@ -1706,10 +2211,36 @@
       }
     }
 
+    // 技能冷却
+    if (state.skillCd.meteor > 0) state.skillCd.meteor = Math.max(0, state.skillCd.meteor - dt);
+    if (state.skillCd.reinforce > 0) state.skillCd.reinforce = Math.max(0, state.skillCd.reinforce - dt);
+
+    // 援军衰减
+    for (const a of state.allies) {
+      a.until -= 0; // until 用绝对 gameNow
+    }
+    state.allies = state.allies.filter((a) => a.hp > 0 && now < a.until);
+
     for (const e of state.enemies) {
       if (e.dead || e.escaped) continue;
-      const spd = e.speed(now);
-      e.progress += spd * dt;
+      let spd = e.speed(now);
+      // 援军拦截
+      let blocked = false;
+      for (const ally of state.allies) {
+        if (ally.hp <= 0) continue;
+        const gap = ally.progress - e.progress;
+        if (gap >= -cellSize * 0.15 && gap <= cellSize * 0.55) {
+          if (e.kind === "boss") {
+            spd *= 0.5;
+          } else {
+            blocked = true;
+            ally.hp -= Math.max(8, e.maxHp * 0.015) * dt;
+            if (ally.hp <= 0) spawnParticle(ally.x, ally.y, "#ffd54f", 6);
+          }
+          break;
+        }
+      }
+      if (!blocked) e.progress += spd * dt;
       if (e.progress >= pathLen) {
         e.escaped = true;
         state.lives -= 1;
@@ -1724,7 +2255,7 @@
         continue;
       }
       // 闪现贼：周期性沿路径前窜
-      if (e.kind === "blinker") {
+      if (e.kind === "blinker" && !blocked) {
         e.blinkTimer = (e.blinkTimer || 0) - dt;
         if (e.blinkTimer <= 0) {
           e.progress += cellSize * (1.2 + Math.random() * 0.6);
@@ -1756,15 +2287,29 @@
     }
 
     state.enemies = state.enemies.filter((e) => !e.dead && !e.escaped);
+    state.allies = state.allies.filter((a) => a.hp > 0 && now < a.until);
+
+    // 地面火
+    for (const f of state.fires) {
+      for (const e of state.enemies) {
+        if (e.dead || e.escaped) continue;
+        if (dist(f.x, f.y, e.x, e.y) <= f.r + e.radius * cellSize) {
+          damageEnemy(e, f.dps * dt, now, "cannon", true);
+        }
+      }
+    }
+    state.fires = state.fires.filter((f) => now < f.until);
 
     for (const t of state.towers) {
       t.cooldown -= dt;
       if (t.muzzleFlash > 0) t.muzzleFlash -= dt;
-      const target = findTarget(t);
-      if (target) {
-        t.angle = Math.atan2(target.y - t.y, target.x - t.x);
+      const targets = findTargets(t, t.multiTarget || 1);
+      if (targets.length) {
+        t.angle = Math.atan2(targets[0].y - t.y, targets[0].x - t.x);
         if (t.cooldown <= 0) {
-          state.projectiles.push(new Projectile(t, target, now));
+          for (const target of targets) {
+            state.projectiles.push(new Projectile(t, target, now));
+          }
           t.cooldown = 1 / t.rate;
           t.muzzleFlash = 0.08;
           sfxShot(t.projectile);
@@ -1805,6 +2350,7 @@
     }
     state.explosions = state.explosions.filter((ex) => ex.life > 0);
 
+    updateSkillButtons();
     checkWaveClear();
     updateHUD();
   }
@@ -1953,7 +2499,69 @@
       ctx.stroke();
     }
 
+    // 合成材料高亮
+    if (state.mergeMode && state.selected) {
+      for (const t of state.towers) {
+        if (t === state.selected) continue;
+        const ok = canMergeCandidate(state.selected, t);
+        const picked = state.mergePicks.includes(t);
+        if (!ok && !picked) continue;
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, cellSize * 0.42, 0, Math.PI * 2);
+        ctx.strokeStyle = picked ? "rgba(255,213,79,0.95)" : "rgba(129,212,250,0.75)";
+        ctx.lineWidth = picked ? 3 : 2;
+        ctx.stroke();
+      }
+    }
+
+    // 地面火
+    for (const f of state.fires) {
+      const life = Math.max(0, f.until - gameNow);
+      const a = 0.25 + 0.2 * Math.min(1, life);
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,112,67,${a})`;
+      ctx.fill();
+      ctx.strokeStyle = `rgba(255,204,128,${a + 0.2})`;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    // 技能瞄准预览
+    if (state.skillAim === "meteor" && state.hoverCell) {
+      const hc = state.hoverCell;
+      const p = cellCenter(hc.c, hc.r);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2 * cellSize, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,112,67,0.12)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,112,67,0.7)";
+      ctx.setLineDash([6, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
     for (const t of state.towers) drawTower(t);
+
+    // 援军
+    for (const a of state.allies) {
+      drawGroundShadow(a.x, a.y, cellSize * 0.22, cellSize * 0.16);
+      ctx.fillStyle = "#c8a45a";
+      ctx.beginPath();
+      ctx.arc(a.x, a.y, cellSize * 0.22, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#5a4020";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = "#8d6e3a";
+      ctx.fillRect(a.x - cellSize * 0.1, a.y - cellSize * 0.18, cellSize * 0.2, cellSize * 0.16);
+      const ratio = Math.max(0, a.hp / a.maxHp);
+      ctx.fillStyle = "rgba(0,0,0,0.45)";
+      ctx.fillRect(a.x - cellSize * 0.2, a.y + cellSize * 0.26, cellSize * 0.4, 3);
+      ctx.fillStyle = ratio > 0.35 ? "#8bc34a" : "#e57373";
+      ctx.fillRect(a.x - cellSize * 0.2, a.y + cellSize * 0.26, cellSize * 0.4 * ratio, 3);
+    }
+
     for (const e of state.enemies) {
       if (e.dead || e.escaped) continue;
       drawEnemy(e);
@@ -2466,6 +3074,33 @@
     }
   }
 
+  function drawTowerStars(t, s) {
+    if (!t.star || t.star <= 1) return;
+    const n = t.star;
+    for (let i = 0; i < n; i++) {
+      const ox = (i - (n - 1) / 2) * s * 0.12;
+      const gy = t.y + s * 0.38;
+      ctx.fillStyle = "#ffd54f";
+      ctx.beginPath();
+      ctx.moveTo(t.x + ox, gy - s * 0.07);
+      ctx.lineTo(t.x + ox + s * 0.045, gy);
+      ctx.lineTo(t.x + ox, gy + s * 0.07);
+      ctx.lineTo(t.x + ox - s * 0.045, gy);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "rgba(90,60,20,0.7)";
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    }
+    if (t.branchName) {
+      ctx.fillStyle = "rgba(255,236,179,0.92)";
+      ctx.font = `bold ${Math.max(8, s * 0.16)}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(t.branchName, t.x, t.y - s * 0.5);
+    }
+  }
+
   function drawTower(t) {
     const s = cellSize;
     drawGroundShadow(t.x, t.y, s * 0.32, s * 0.28);
@@ -2473,6 +3108,7 @@
     else if (t.type === "cannon") drawCannonTower(t, s);
     else drawFrostTower(t, s);
     drawTowerLevelMarks(t, s);
+    drawTowerStars(t, s);
   }
 
   /** 箭塔：石质箭楼 + 城垛 + 旗帜 */
@@ -2644,10 +3280,18 @@
   function drawEnemy(e) {
     const rad = e.radius * cellSize;
     const now = gameNow; // 与受击闪白/减速同一模拟时钟
-    const slowed = e.slowMul < 1;
+    const slowed = e.slowMul < 1 || now < e.freezeUntil;
+    const frozen = now < e.freezeUntil;
     const flash = e.hitFlash && now < e.hitFlash;
 
     drawGroundShadow(e.x, e.y, rad * 0.95, rad * 0.8);
+
+    if (frozen) {
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, rad + 7, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(224,247,250,0.35)";
+      ctx.fill();
+    }
 
     if (slowed) {
       ctx.beginPath();

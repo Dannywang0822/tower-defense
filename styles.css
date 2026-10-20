@@ -643,3 +643,82 @@ body[data-decor="fog"] #stage-wrap { border-color: #6a6880; }
 body[data-decor="snow"] #stage-wrap { border-color: #7f93a8; }
 body[data-decor="lava"] #stage-wrap { border-color: #8a4a32; }
 body[data-decor="toxic"] #stage-wrap { border-color: #5e7a48; }
+
+
+/* ---- v16 技能 / 合成 / 专精 ---- */
+.skill-btns {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.skill-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  padding: 3px 7px;
+  border-radius: 8px;
+  border: 1px solid #6a5438;
+  background: linear-gradient(180deg, #3a3020 0%, #241c14 100%);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1.15;
+}
+.skill-btn .skill-cd {
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.skill-btn.ready {
+  border-color: #d4af55;
+  box-shadow: 0 0 0 1px rgba(212,175,85,0.25) inset;
+}
+.skill-btn.aiming {
+  border-color: #ff7043;
+  color: #ffccbc;
+  box-shadow: 0 0 10px rgba(255,112,67,0.35);
+}
+.skill-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.action-btn.accent {
+  background: linear-gradient(180deg, #5a4a28 0%, #3a3018 100%);
+  border: 1px solid #d4af55;
+  color: #ffe082;
+}
+.action-btn.accent.active,
+.action-btn.accent:active {
+  background: linear-gradient(180deg, #7a6230 0%, #4a3818 100%);
+  box-shadow: 0 0 0 1px rgba(255,213,79,0.35) inset;
+}
+#branch-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 6, 4, 0.72);
+  padding: 16px;
+}
+#branch-overlay.hidden { display: none !important; }
+.branch-card { max-width: 320px; width: 100%; }
+.branch-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.branch-opt {
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px !important;
+}
+.branch-opt strong { font-size: 16px; color: #ffe082; }
+.branch-opt span { font-size: 12px; color: var(--muted); font-weight: 500; }
