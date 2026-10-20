@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#1a1610" />
   <title>路卫 — Coinpath Defense</title>
-  <link rel="stylesheet" href="styles.css?v=22" />
+  <link rel="stylesheet" href="styles.css?v=23" />
 </head>
 <body>
   <div id="app">
@@ -47,49 +47,51 @@
       </div>
     </header>
 
-    <main id="stage-wrap">
-      <canvas id="game" width="400" height="600"></canvas>
-      <div id="toast" class="hidden"></div>
-    </main>
+    <div id="board">
+      <main id="stage-wrap">
+        <canvas id="game" width="400" height="600"></canvas>
+        <div id="toast" class="hidden"></div>
+      </main>
 
-    <aside id="panel">
-      <div id="build-panel" class="panel-block">
-        <div class="panel-title">城防建造</div>
-        <div class="tower-btns">
-          <button type="button" class="tower-btn" data-type="arrow" id="btn-arrow">
-            <span class="tb-name">箭塔</span>
-            <span class="tb-cost">50</span>
-            <span class="tb-desc">快 · 单体</span>
-          </button>
-          <button type="button" class="tower-btn" data-type="cannon" id="btn-cannon">
-            <span class="tb-name">炮塔</span>
-            <span class="tb-cost">120</span>
-            <span class="tb-desc">溅射</span>
-          </button>
-          <button type="button" class="tower-btn" data-type="frost" id="btn-frost">
-            <span class="tb-name">霜塔</span>
-            <span class="tb-cost">90</span>
-            <span class="tb-desc">减速</span>
-          </button>
+      <aside id="panel" aria-label="城防建造">
+        <div id="build-panel" class="panel-block">
+          <div class="panel-title">城防建造</div>
+          <div class="tower-btns">
+            <button type="button" class="tower-btn" data-type="arrow" id="btn-arrow">
+              <span class="tb-name">箭塔</span>
+              <span class="tb-cost">50</span>
+              <span class="tb-desc">快 · 单体</span>
+            </button>
+            <button type="button" class="tower-btn" data-type="cannon" id="btn-cannon">
+              <span class="tb-name">炮塔</span>
+              <span class="tb-cost">120</span>
+              <span class="tb-desc">溅射</span>
+            </button>
+            <button type="button" class="tower-btn" data-type="frost" id="btn-frost">
+              <span class="tb-name">霜塔</span>
+              <span class="tb-cost">90</span>
+              <span class="tb-desc">减速</span>
+            </button>
+          </div>
+          <p class="hint">按住拖到空地</p>
         </div>
-        <p class="hint">按住塔按钮拖到空地建造 · 轻点预览 · 拖塔合成</p>
-      </div>
 
-      <div id="select-panel" class="panel-block hidden">
-        <div class="panel-title" id="sel-title">箭塔 Lv.1</div>
-        <div class="sel-stats" id="sel-stats"></div>
-        <div class="sel-actions">
-          <button type="button" class="action-btn primary" id="btn-upgrade">升级</button>
-          <button type="button" class="action-btn accent" id="btn-merge">合成</button>
-          <button type="button" class="action-btn danger" id="btn-sell">卖掉</button>
-          <button type="button" class="action-btn ghost" id="btn-deselect">取消</button>
+        <div id="select-panel" class="panel-block hidden">
+          <div class="panel-title" id="sel-title">箭塔 Lv.1</div>
+          <div class="sel-stats" id="sel-stats"></div>
+          <div class="sel-actions">
+            <button type="button" class="action-btn primary" id="btn-upgrade">升级</button>
+            <button type="button" class="action-btn accent" id="btn-merge">合成</button>
+            <button type="button" class="action-btn danger" id="btn-sell">卖掉</button>
+            <button type="button" class="action-btn ghost" id="btn-deselect">取消</button>
+          </div>
         </div>
-      </div>
+      </aside>
+    </div>
 
-      <div class="panel-block wave-block">
-        <button type="button" class="action-btn wave-btn" id="btn-next-wave">开始第 1 波</button>
-      </div>
-    </aside>
+    <div id="wave-bar" class="panel-block wave-block">
+      <button type="button" class="action-btn wave-btn" id="btn-next-wave">开始第 1 波</button>
+    </div>
 
     <div id="start-overlay">
       <div class="overlay-card start-card">
@@ -165,7 +167,7 @@
       </div>
     </div>
   </div>
-  <script src="audio.js?v=22"></script>
-  <script src="game.js?v=22"></script>
+  <script src="audio.js?v=23"></script>
+  <script src="game.js?v=23"></script>
 </body>
 </html>
